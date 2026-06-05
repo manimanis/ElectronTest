@@ -3,8 +3,9 @@
 A **desktop application** built with **Vue.js 3** and **Electron** that allows you to select a local folder and analyze its contents in a structured tree view.
 
 ![Technologies](https://img.shields.io/badge/Vue.js-3.4-4FC08D?logo=vue.js)
-![Technologies](https://img.shields.io/badge/Electron-30-47848F?logo=electron)
-![Technologies](https://img.shields.io/badge/Vite-5-646CFF?logo=vite)
+![Technologies](https://img.shields.io/badge/Electron-41-47848F?logo=electron)
+![Technologies](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)
+![Technologies](https://img.shields.io/badge/electron--builder-26-2E8B57?logo=windows)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
@@ -119,10 +120,10 @@ folder-analyzer/
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | Vue.js 3 (Composition API, `<script setup>`) |
-| **Build Tool** | Vite 5 |
-| **Desktop Shell** | Electron 30 |
-| **Packaging** | electron-builder (portable target) |
+| **Frontend** | Vue.js 3.4 (Composition API, `<script setup>`) |
+| **Build Tool** | Vite 6 |
+| **Desktop Shell** | Electron 41 |
+| **Packaging** | electron-builder 26 (portable target) |
 | **File System** | Node.js `fs` module (via main process) |
 | **Icon Processing** | Sharp + png-to-ico |
 | **Communication** | IPC + contextBridge (secure) |

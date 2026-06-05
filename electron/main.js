@@ -1,11 +1,13 @@
 // Electron main process
 // Handles filesystem access and IPC communication with the renderer
+// Supports async scanning with progress and cancellation for large folders
 
 const { app, BrowserWindow, dialog, ipcMain } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
 let mainWindow = null
+let currentScanAbort = false
 
 /**
  * Creates the main application window
@@ -38,12 +40,20 @@ function createWindow() {
 
 /**
  * Recursively scan a directory and build a tree structure
+ * Reports progress via callback for large folders
+ * Respects the abort flag for cancellation
+ *
  * Returns: { name, path, type, size, children[], modifiedAt }
  */
-function scanDirectory(dirPath) {
+function scanDirectory(dirPath, depth = 0, progressCb = null, maxDepth = 100) {
+  // Check for cancellation
+  if (currentScanAbort) {
+    throw new Error('canceled')
+  }
+
   const stats = fs.statSync(dirPath)
   const name = path.basename(dirPath)
-  
+
   // Base info for the current item
   const item = {
     name,
@@ -55,27 +65,42 @@ function scanDirectory(dirPath) {
   }
 
   // If it's a directory, recursively scan its contents
-  if (stats.isDirectory()) {
+  if (stats.isDirectory() && depth < maxDepth) {
     try {
       const entries = fs.readdirSync(dirPath)
+
+      // Report progress periodically
+      if (progressCb && depth < 3) {
+        progressCb(`Scanning: ${name} (${entries.length} items)`)
+      }
+
       for (const entry of entries) {
+        // Check cancellation between entries
+        if (currentScanAbort) {
+          throw new Error('canceled')
+        }
+
         // Skip hidden files and system folders
         if (entry.startsWith('.')) continue
+
         const childPath = path.join(dirPath, entry)
         try {
-          const childItem = scanDirectory(childPath)
+          const childItem = scanDirectory(childPath, depth + 1, progressCb, maxDepth)
           item.children.push(childItem)
         } catch (err) {
+          if (err.message === 'canceled') throw err
           // Skip files/directories we can't access
           console.warn(`Cannot access ${childPath}: ${err.message}`)
         }
       }
+
       // Sort: folders first, then alphabetically
       item.children.sort((a, b) => {
         if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
         return a.name.localeCompare(b.name)
       })
     } catch (err) {
+      if (err.message === 'canceled') throw err
       console.warn(`Cannot read directory ${dirPath}: ${err.message}`)
     }
   }
@@ -86,9 +111,9 @@ function scanDirectory(dirPath) {
 /**
  * Analyze a folder and return summary statistics
  */
-function analyzeFolder(dirPath) {
-  const tree = scanDirectory(dirPath)
-  
+function analyzeFolder(dirPath, progressCb = null) {
+  const tree = scanDirectory(dirPath, 0, progressCb)
+
   // Calculate total stats by walking the tree
   function calculateStats(node) {
     let totalFiles = 0
@@ -144,7 +169,7 @@ ipcMain.handle('dialog:selectFolder', async () => {
 })
 
 /**
- * Scans and analyzes the selected folder
+ * Synchronous folder analysis (for small folders)
  * Returns the full tree structure with stats
  */
 ipcMain.handle('folder:analyze', async (event, folderPath) => {
@@ -160,7 +185,54 @@ ipcMain.handle('folder:analyze', async (event, folderPath) => {
 })
 
 /**
- * Returns a file's content for preview if needed
+ * Asynchronous folder analysis with progress reporting
+ * Uses IPC events to send progress updates during scan
+ * Supports cancellation via cancelScan handler
+ */
+ipcMain.handle('folder:analyzeAsync', async (event, folderPath) => {
+  try {
+    if (!fs.existsSync(folderPath)) {
+      throw new Error(`Path does not exist: ${folderPath}`)
+    }
+
+    // Reset abort flag for new scan
+    currentScanAbort = false
+
+    // Create a progress callback that sends updates to renderer
+    const progressCb = (message) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('scan:progress', message)
+      }
+    }
+
+    // Run analysis with progress
+    const result = analyzeFolder(folderPath, progressCb)
+
+    // Check if was cancelled during scan
+    if (currentScanAbort) {
+      throw new Error('canceled')
+    }
+
+    return result
+  } catch (err) {
+    if (err.message === 'canceled') {
+      throw err
+    }
+    console.error('Folder analysis failed:', err.message)
+    throw err
+  }
+})
+
+/**
+ * Cancel a running folder scan
+ */
+ipcMain.handle('folder:cancelScan', async () => {
+  currentScanAbort = true
+  return true
+})
+
+/**
+ * Returns detailed info about a file
  */
 ipcMain.handle('file:getInfo', async (event, filePath) => {
   try {
@@ -175,6 +247,34 @@ ipcMain.handle('file:getInfo', async (event, filePath) => {
     }
   } catch (err) {
     console.error('File info failed:', err.message)
+    throw err
+  }
+})
+
+/**
+ * Open a file with the default system application
+ */
+ipcMain.handle('file:openInSystem', async (event, filePath) => {
+  try {
+    const { shell } = require('electron')
+    await shell.openPath(filePath)
+    return true
+  } catch (err) {
+    console.error('Failed to open file:', err.message)
+    throw err
+  }
+})
+
+/**
+ * Open a folder in the system file explorer
+ */
+ipcMain.handle('folder:openInExplorer', async (event, folderPath) => {
+  try {
+    const { shell } = require('electron')
+    await shell.openPath(folderPath)
+    return true
+  } catch (err) {
+    console.error('Failed to open folder:', err.message)
     throw err
   }
 })

@@ -24,6 +24,28 @@ function toggleExpand() {
 }
 
 /**
+ * Open file/folder with the default system application
+ */
+async function openInSystem() {
+  try {
+    if (props.node.type === 'folder') {
+      await window.electronAPI.openInExplorer(props.node.path)
+    } else {
+      await window.electronAPI.openInSystem(props.node.path)
+    }
+  } catch (err) {
+    console.error('Failed to open:', err.message)
+  }
+}
+
+/**
+ * Handle double-click: expand folders, open files
+ */
+function handleDoubleClick() {
+  openInSystem()
+}
+
+/**
  * Get the appropriate icon based on file type/extension
  */
 const fileIcon = computed(() => {
@@ -113,6 +135,7 @@ const indentStyle = computed(() => ({
       :class="{ 'is-folder': node.type === 'folder', 'is-file': node.type === 'file' }"
       :style="indentStyle"
       @click="toggleExpand"
+      @dblclick="handleDoubleClick"
     >
       <!-- Expand/collapse arrow for folders -->
       <span v-if="node.type === 'folder'" class="expand-arrow">

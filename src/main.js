@@ -1,5 +1,11 @@
+/**
+ * Vue application entry point
+ * Sets up Vue with Router for multi-page navigation
+ */
 import { createApp } from 'vue'
 import App from './App.vue'
+import router from './router'
 
-// Create and mount the Vue application
-createApp(App).mount('#app')
+const app = createApp(App)
+app.use(router)
+app.mount('#app')
