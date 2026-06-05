@@ -35,5 +35,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openInSystem: (filePath) => ipcRenderer.invoke('file:openInSystem', filePath),
 
   // Open a folder in the system file explorer
-  openInExplorer: (folderPath) => ipcRenderer.invoke('folder:openInExplorer', folderPath)
+  openInExplorer: (folderPath) => ipcRenderer.invoke('folder:openInExplorer', folderPath),
+
+  // ============== Cleaning API ==============
+
+  // Get standard folders (Desktop, Documents, Downloads, Bac2026) with their contents
+  getStandardFolders: () => ipcRenderer.invoke('cleaner:getStandardFolders'),
+
+  // Scan a specific folder and return non-shortcut items
+  scanFolder: (folderPath) => ipcRenderer.invoke('cleaner:scanFolder', folderPath),
+
+  // Move items to recycle bin (trash)
+  moveToTrash: (items) => ipcRenderer.invoke('cleaner:moveToTrash', items),
+
+  // Permanently delete items
+  permanentDelete: (items) => ipcRenderer.invoke('cleaner:permanentDelete', items),
+
+  // Move items to a target folder
+  moveToFolder: (items, targetDir) => ipcRenderer.invoke('cleaner:moveToFolder', items, targetDir),
+
+  // Open a folder selection dialog for choosing a destination
+  selectDestinationFolder: () => ipcRenderer.invoke('cleaner:selectDestinationFolder'),
+
+  // Find duplicate shortcuts on the Desktop
+  findDuplicateShortcuts: () => ipcRenderer.invoke('cleaner:findDuplicateShortcuts'),
+
+  // Delete specific duplicate shortcuts
+  deleteShortcuts: (shortcutPaths) => ipcRenderer.invoke('cleaner:deleteShortcuts', shortcutPaths)
 })

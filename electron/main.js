@@ -2,9 +2,10 @@
 // Handles filesystem access and IPC communication with the renderer
 // Supports async scanning with progress and cancellation for large folders
 
-const { app, BrowserWindow, dialog, ipcMain } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 
 let mainWindow = null
 let currentScanAbort = false
@@ -277,6 +278,323 @@ ipcMain.handle('folder:openInExplorer', async (event, folderPath) => {
     console.error('Failed to open folder:', err.message)
     throw err
   }
+})
+
+/**
+ * Get the list of standard user folders to clean
+ */
+function getStandardFolders() {
+  const homeDir = os.homedir()
+  const desktop = path.join(homeDir, 'Desktop')
+  const documents = path.join(homeDir, 'Documents')
+  const downloads = path.join(homeDir, 'Downloads')
+  const bac2026 = path.join(desktop, 'Bac2026')
+
+  const folders = [
+    { name: 'Desktop', path: desktop },
+    { name: 'Documents', path: documents },
+    { name: 'Downloads', path: downloads }
+  ]
+
+  // Only add Bac2026 if it exists
+  if (fs.existsSync(bac2026)) {
+    folders.push({ name: 'Bac2026', path: bac2026 })
+  }
+
+  return folders
+}
+
+/**
+ * Check if a file is a shortcut (.lnk on Windows)
+ */
+function isShortcut(filePath) {
+  const ext = path.extname(filePath).toLowerCase()
+  return ext === '.lnk'
+}
+
+/**
+ * Check if a file is a shortcut by its symlink attribute or .lnk extension
+ */
+function isShortcutOrSymlink(filePath) {
+  // .lnk files are Windows shortcuts
+  if (isShortcut(filePath)) return true
+  try {
+    const stats = fs.lstatSync(filePath)
+    return stats.isSymbolicLink()
+  } catch (e) {
+    return false
+  }
+}
+
+/**
+ * Get a list of .lnk files in a folder and resolve their targets
+ * to identify duplicates
+ */
+function getShortcutTargets(folderPath) {
+  const shortcuts = []
+  try {
+    const entries = fs.readdirSync(folderPath)
+    for (const entry of entries) {
+      const fullPath = path.join(folderPath, entry)
+      if (isShortcut(fullPath)) {
+        // On Windows, we resolve the .lnk target via shell
+        try {
+          const stats = fs.statSync(fullPath)
+          shortcuts.push({
+            path: fullPath,
+            name: entry,
+            size: stats.size,
+            modifiedAt: stats.mtime.toISOString(),
+            // We'll use the file name (without .lnk) as a proxy for the target
+            targetName: path.basename(entry, '.lnk').toLowerCase()
+          })
+        } catch (e) {
+          // Skip inaccessible shortcuts
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`Cannot read shortcuts from ${folderPath}: ${e.message}`)
+  }
+  return shortcuts
+}
+
+/**
+ * Find duplicate shortcuts (same target application name) on the Desktop
+ */
+function findDuplicateShortcuts(desktopPath) {
+  const shortcuts = getShortcutTargets(desktopPath)
+
+  // Group shortcuts by target name
+  const grouped = {}
+  for (const sc of shortcuts) {
+    if (!grouped[sc.targetName]) {
+      grouped[sc.targetName] = []
+    }
+    grouped[sc.targetName].push(sc)
+  }
+
+  // Find groups with more than one shortcut (duplicates)
+  const duplicates = []
+  for (const [target, items] of Object.entries(grouped)) {
+    if (items.length > 1) {
+      // Keep the first one (by modified date), mark the rest as duplicates
+      items.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt))
+      for (let i = 1; i < items.length; i++) {
+        duplicates.push(items[i])
+      }
+    }
+  }
+
+  return duplicates
+}
+
+/**
+ * Scan a folder and return non-shortcut files (with their sizes)
+ */
+function scanFolderForCleaning(folderPath) {
+  const items = []
+  try {
+    const entries = fs.readdirSync(folderPath)
+    for (const entry of entries) {
+      const fullPath = path.join(folderPath, entry)
+      try {
+        const stats = fs.statSync(fullPath)
+        // Skip shortcuts (.lnk files) as per requirements
+        if (isShortcutOrSymlink(fullPath)) continue
+
+        items.push({
+          name: entry,
+          path: fullPath,
+          size: stats.size,
+          formattedSize: formatSize(stats.size),
+          modifiedAt: stats.mtime.toISOString(),
+          isDirectory: stats.isDirectory()
+        })
+      } catch (e) {
+        // Skip inaccessible items
+      }
+    }
+  } catch (e) {
+    console.warn(`Cannot scan ${folderPath}: ${e.message}`)
+  }
+
+  // Sort: folders first, then alphabetically
+  items.sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+
+  return items
+}
+
+/**
+ * Move file/folder to trash (recycle bin)
+ */
+function moveToTrash(filePath) {
+  try {
+    shell.trashItem(filePath)
+    return { success: true, message: `Moved to trash: ${path.basename(filePath)}` }
+  } catch (err) {
+    return { success: false, message: `Failed to move to trash: ${err.message}` }
+  }
+}
+
+/**
+ * Permanently delete a file or folder
+ */
+function permanentDelete(filePath) {
+  try {
+    const stat = fs.statSync(filePath)
+    if (stat.isDirectory()) {
+      fs.rmSync(filePath, { recursive: true, force: true })
+    } else {
+      fs.unlinkSync(filePath)
+    }
+    return { success: true, message: `Deleted permanently: ${path.basename(filePath)}` }
+  } catch (err) {
+    return { success: false, message: `Failed to delete: ${err.message}` }
+  }
+}
+
+/**
+ * Move a file or folder to a target directory
+ */
+function moveToFolder(filePath, targetDir) {
+  try {
+    // Ensure target directory exists
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true })
+    }
+
+    const fileName = path.basename(filePath)
+    const destPath = path.join(targetDir, fileName)
+
+    // Handle name conflicts
+    let finalDest = destPath
+    let counter = 1
+    while (fs.existsSync(finalDest)) {
+      const ext = path.extname(fileName)
+      const base = path.basename(fileName, ext)
+      finalDest = path.join(targetDir, `${base}_(${counter})${ext}`)
+      counter++
+    }
+
+    fs.renameSync(filePath, finalDest)
+    return {
+      success: true,
+      message: `Moved to: ${finalDest}`
+    }
+  } catch (err) {
+    return { success: false, message: `Failed to move: ${err.message}` }
+  }
+}
+
+// Cleaning IPC Handlers
+
+/**
+ * Get standard folders and their contents for cleaning
+ */
+ipcMain.handle('cleaner:getStandardFolders', async () => {
+  const folders = getStandardFolders()
+  return folders.map(f => ({
+    ...f,
+    exists: fs.existsSync(f.path),
+    items: fs.existsSync(f.path) ? scanFolderForCleaning(f.path) : []
+  }))
+})
+
+/**
+ * Scan a specific folder and return non-shortcut items for cleaning
+ */
+ipcMain.handle('cleaner:scanFolder', async (event, folderPath) => {
+  if (!fs.existsSync(folderPath)) {
+    throw new Error(`Folder does not exist: ${folderPath}`)
+  }
+  return scanFolderForCleaning(folderPath)
+})
+
+/**
+ * Move items to trash
+ * items is an array of file paths
+ */
+ipcMain.handle('cleaner:moveToTrash', async (event, items) => {
+  const results = []
+  for (const itemPath of items) {
+    results.push(moveToTrash(itemPath))
+  }
+  return results
+})
+
+/**
+ * Permanently delete items
+ * items is an array of file paths
+ */
+ipcMain.handle('cleaner:permanentDelete', async (event, items) => {
+  const results = []
+  for (const itemPath of items) {
+    results.push(permanentDelete(itemPath))
+  }
+  return results
+})
+
+/**
+ * Move items to a target directory
+ * items is an array of file paths, targetDir is the destination
+ */
+ipcMain.handle('cleaner:moveToFolder', async (event, items, targetDir) => {
+  const results = []
+  for (const itemPath of items) {
+    results.push(moveToFolder(itemPath, targetDir))
+  }
+  return results
+})
+
+/**
+ * Open a folder selection dialog for choosing a destination folder
+ */
+ipcMain.handle('cleaner:selectDestinationFolder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Select destination folder for moved items'
+  })
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+  return result.filePaths[0]
+})
+
+/**
+ * Find and return duplicate shortcuts on the Desktop
+ */
+ipcMain.handle('cleaner:findDuplicateShortcuts', async () => {
+  const desktop = path.join(os.homedir(), 'Desktop')
+  if (!fs.existsSync(desktop)) {
+    return []
+  }
+  return findDuplicateShortcuts(desktop)
+})
+
+/**
+ * Delete specific duplicate shortcuts
+ */
+ipcMain.handle('cleaner:deleteShortcuts', async (event, shortcutPaths) => {
+  const results = []
+  for (const scPath of shortcutPaths) {
+    try {
+      fs.unlinkSync(scPath)
+      results.push({
+        success: true,
+        message: `Deleted shortcut: ${path.basename(scPath)}`
+      })
+    } catch (err) {
+      results.push({
+        success: false,
+        message: `Failed to delete shortcut: ${err.message}`
+      })
+    }
+  }
+  return results
 })
 
 // App lifecycle

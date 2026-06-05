@@ -5,6 +5,7 @@
 import { createRouter, createMemoryHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import AboutView from '../views/AboutView.vue'
+import CleanerView from '../views/CleanerView.vue'
 
 const routes = [
   {
@@ -12,6 +13,12 @@ const routes = [
     name: 'home',
     component: HomeView,
     meta: { title: 'Folder Analyzer - Analyze' }
+  },
+  {
+    path: '/cleaner',
+    name: 'cleaner',
+    component: CleanerView,
+    meta: { title: 'Folder Analyzer - Cleaner' }
   },
   {
     path: '/about',

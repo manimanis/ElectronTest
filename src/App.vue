@@ -33,6 +33,13 @@ function navigateTo(routeName) {
         </button>
         <button
           class="nav-link"
+          :class="{ active: $route.name === 'cleaner' }"
+          @click="navigateTo('cleaner')"
+        >
+          🧹 Cleaner
+        </button>
+        <button
+          class="nav-link"
           :class="{ active: $route.name === 'about' }"
           @click="navigateTo('about')"
         >
