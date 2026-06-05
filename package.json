@@ -26,6 +26,12 @@
     "vite-plugin-electron": "^0.28.6",
     "vite-plugin-electron-renderer": "^0.14.5"
   },
+  "allowScripts": {
+    "electron@41.7.1": true,
+    "sharp@0.34.5": true,
+    "esbuild@0.25.12": true,
+    "electron-winstaller@5.4.0": true
+  },
   "build": {
     "appId": "com.folder-analyzer.app",
     "productName": "Folder Analyzer",

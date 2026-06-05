@@ -86,6 +86,69 @@ Output: `release/` folder containing:
 
 ---
 
+## ⚠️ Troubleshooting
+
+### Electron failed to install correctly
+
+**Error message:**
+```
+Error: Electron failed to install correctly, please delete node_modules/electron and try installing again
+```
+
+This happens when npm's `allowScripts` security feature blocks Electron's `postinstall` script from downloading the binary.
+
+**Quick fix (recommended):**
+
+1. Open `package.json` and ensure these entries exist in the `allowScripts` field:
+   ```json
+   "allowScripts": {
+     "electron@41.7.1": true,
+     "sharp@0.34.5": true,
+     "esbuild@0.25.12": true,
+     "electron-winstaller@5.4.0": true
+   }
+   ```
+
+2. Delete the corrupted Electron module and reinstall:
+   ```bash
+   rmdir /s /q node_modules\electron
+   npm install
+   ```
+
+**Manual fix (if the above doesn't work):**
+
+If `npm install` still doesn't download the binary, extract it manually:
+
+1. Delete the corrupted module:
+   ```bash
+   rmdir /s /q node_modules\electron
+   npm install
+   ```
+
+2. Trigger the download manually:
+   ```bash
+   node node_modules\electron\install.js
+   ```
+   
+3. If the `dist/` folder is still empty, find the cached zip and extract it:
+   ```bash
+   # Find the cached zip
+   dir %LOCALAPPDATA%\electron\Cache\ /s /b
+   
+   # Extract using PowerShell (use the path from the command above)
+   powershell Expand-Archive -Path "%LOCALAPPDATA%\electron\Cache\<hash>\electron-v41.7.1-win32-x64.zip" -DestinationPath "node_modules\electron\dist" -Force
+   
+   # Create path.txt
+   node -e "require('fs').writeFileSync('node_modules/electron/path.txt', 'electron.exe')"
+   ```
+
+4. Verify it works:
+   ```bash
+   npx electron --version
+   ```
+
+---
+
 ## 🏗️ Project Structure
 
 ```
