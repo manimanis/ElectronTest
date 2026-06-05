@@ -61,5 +61,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   findDuplicateShortcuts: () => ipcRenderer.invoke('cleaner:findDuplicateShortcuts'),
 
   // Delete specific duplicate shortcuts
-  deleteShortcuts: (shortcutPaths) => ipcRenderer.invoke('cleaner:deleteShortcuts', shortcutPaths)
+  deleteShortcuts: (shortcutPaths) => ipcRenderer.invoke('cleaner:deleteShortcuts', shortcutPaths),
+
+  // Check if the Recycle Bin is empty (returns { success, isEmpty, count })
+  isRecycleBinEmpty: () => ipcRenderer.invoke('cleaner:isRecycleBinEmpty'),
+
+  // Empty the entire Windows Recycle Bin
+  emptyRecycleBin: () => ipcRenderer.invoke('cleaner:emptyRecycleBin')
 })

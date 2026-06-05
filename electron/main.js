@@ -431,9 +431,9 @@ function scanFolderForCleaning(folderPath) {
 /**
  * Move file/folder to trash (recycle bin)
  */
-function moveToTrash(filePath) {
+async function moveToTrash(filePath) {
   try {
-    shell.trashItem(filePath)
+    await shell.trashItem(filePath)
     return { success: true, message: `Moved to trash: ${path.basename(filePath)}` }
   } catch (err) {
     return { success: false, message: `Failed to move to trash: ${err.message}` }
@@ -521,7 +521,7 @@ ipcMain.handle('cleaner:scanFolder', async (event, folderPath) => {
 ipcMain.handle('cleaner:moveToTrash', async (event, items) => {
   const results = []
   for (const itemPath of items) {
-    results.push(moveToTrash(itemPath))
+    results.push(await moveToTrash(itemPath))
   }
   return results
 })
@@ -573,6 +573,102 @@ ipcMain.handle('cleaner:findDuplicateShortcuts', async () => {
     return []
   }
   return findDuplicateShortcuts(desktop)
+})
+
+/**
+ * Check if the Recycle Bin has any items
+ * Uses Shell.Application COM object to count items
+ */
+async function isRecycleBinEmpty() {
+  const { execSync } = require('child_process')
+
+  try {
+    // Use PowerShell to count items in the Recycle Bin
+    const output = execSync(
+      'powershell -NoProfile -Command "& {(New-Object -ComObject Shell.Application).NameSpace(0x0a).Items().Count}"',
+      { timeout: 10000, windowsHide: true, encoding: 'utf-8' }
+    )
+    const count = parseInt(output.trim(), 10)
+    return { success: true, isEmpty: count === 0, count: count || 0 }
+  } catch (err) {
+    // Fallback VBScript approach
+    try {
+      const tmpFile = path.join(os.tmpdir(), `check_recycle_bin_${Date.now()}.vbs`)
+      const vbsContent = `
+Set objShell = CreateObject("Shell.Application")
+Set objFolder = objShell.NameSpace(&H0a&)
+WScript.Echo objFolder.Items().Count
+`.trim()
+      fs.writeFileSync(tmpFile, vbsContent)
+      const output = execSync(`cscript //NoLogo "${tmpFile}"`, {
+        timeout: 10000,
+        windowsHide: true,
+        encoding: 'utf-8'
+      })
+      const count = parseInt(output.trim(), 10)
+      return { success: true, isEmpty: count === 0, count: count || 0 }
+    } catch (err2) {
+      return { success: false, isEmpty: false, count: 0, error: err2.message }
+    } finally {
+      try { if (tmpFile) fs.unlinkSync(tmpFile) } catch (e) { /* ignore */ }
+    }
+  }
+}
+
+/**
+ * Empty the entire Windows Recycle Bin
+ * Uses Shell.Application COM object via PowerShell which is the most reliable method
+ */
+async function emptyRecycleBin() {
+  const { execSync } = require('child_process')
+
+  // Generate a unique VBScript file to run the operation silently
+  const tmpFile = path.join(os.tmpdir(), `empty_recycle_bin_${Date.now()}.vbs`)
+  const vbsContent = `
+Set objShell = CreateObject("Shell.Application")
+Set objFolder = objShell.NameSpace(&H0a&)
+objFolder.Items().InvokeVerbEx("delete")
+`.trim()
+
+  try {
+    fs.writeFileSync(tmpFile, vbsContent)
+
+    // Run the VBScript silently using CScript
+    execSync(`cscript //NoLogo "${tmpFile}"`, {
+      timeout: 30000,
+      windowsHide: true
+    })
+
+    return { success: true, message: 'Recycle Bin emptied successfully' }
+  } catch (err) {
+    // Fallback: try direct PowerShell COM approach with confirmation suppression
+    try {
+      execSync(
+        'powershell -NoProfile -Command "$shell = New-Object -ComObject Shell.Application; $shell.NameSpace(0x0a).Items() | %%{ $_.InvokeVerbEx(\'delete\') }"',
+        { timeout: 30000, windowsHide: true }
+      )
+      return { success: true, message: 'Recycle Bin emptied successfully' }
+    } catch (err2) {
+      return { success: false, message: `Failed to empty Recycle Bin: ${err2.message}` }
+    }
+  } finally {
+    // Clean up temp file
+    try { fs.unlinkSync(tmpFile) } catch (e) { /* ignore */ }
+  }
+}
+
+/**
+ * Check if Recycle Bin is empty
+ */
+ipcMain.handle('cleaner:isRecycleBinEmpty', async () => {
+  return await isRecycleBinEmpty()
+})
+
+/**
+ * Empty the Recycle Bin
+ */
+ipcMain.handle('cleaner:emptyRecycleBin', async () => {
+  return await emptyRecycleBin()
 })
 
 /**
