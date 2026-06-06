@@ -6,7 +6,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
-const { formatSize } = require('../src/utils/format.js')
+const { formatSize } = require('../src/utils/format.cjs')
 
 let mainWindow = null
 let currentScanAbort = false

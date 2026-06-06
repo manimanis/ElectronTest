@@ -16,6 +16,8 @@ import { ref, onMounted, computed, watch } from 'vue'
 const config = ref({ folders: [] })
 const loading = ref(true)
 const saving = ref(false)
+const isAutoSaving = ref(false)
+const lastAutoSaveStatus = ref('') // '', 'saved', 'error'
 const errorMessage = ref('')
 const toast = ref('')
 const toastType = ref('') // 'success' or 'error'
@@ -23,6 +25,17 @@ const expandedIndex = ref(-1)
 // #23: Live path validation state per folder index
 const pathValidations = ref({})
 let validationTimer = null
+let autoSaveTimer = null
+let isInitialLoad = true
+
+// #16: Auto-save with debounce — watch deep changes to config
+watch(config, () => {
+  if (isInitialLoad) return
+  clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(() => {
+    saveConfig({ auto: true })
+  }, 800)
+}, { deep: true })
 
 // Example patterns for reference
 const examplePatterns = [
@@ -52,6 +65,7 @@ async function loadConfig() {
   try {
     const loaded = await window.electronAPI.loadFolderConfig()
     config.value = loaded
+    isInitialLoad = false
   } catch (err) {
     console.error('Failed to load config:', err)
     errorMessage.value = 'Erreur lors du chargement de la configuration : ' + err.message
@@ -61,24 +75,34 @@ async function loadConfig() {
   }
 }
 
-async function saveConfig() {
-  saving.value = true
+async function saveConfig({ auto = false } = {}) {
+  if (auto) {
+    isAutoSaving.value = true
+  } else {
+    saving.value = true
+  }
   try {
     const success = await window.electronAPI.saveFolderConfig(JSON.stringify(config.value))
     if (success) {
-      // Success: clear error banner and show success toast
       errorMessage.value = ''
-      showToast('Configuration sauvegardée avec succès', 'success', 3000)
+      if (auto) {
+        lastAutoSaveStatus.value = 'saved'
+        setTimeout(() => { lastAutoSaveStatus.value = '' }, 2000)
+      } else {
+        showToast('Configuration sauvegardée avec succès', 'success', 3000)
+      }
     } else {
-      // Error saving: show persistent error banner + temporary error toast
       errorMessage.value = 'Erreur lors de la sauvegarde de la configuration'
-      showToast('Erreur lors de la sauvegarde', 'error', 4000)
+      if (!auto) showToast('Erreur lors de la sauvegarde', 'error', 4000)
+      else lastAutoSaveStatus.value = 'error'
     }
   } catch (err) {
     console.error('Save config error:', err)
     errorMessage.value = 'Erreur : ' + err.message
-    showToast('Erreur lors de la sauvegarde', 'error', 4000)
+    if (!auto) showToast('Erreur lors de la sauvegarde', 'error', 4000)
+    else lastAutoSaveStatus.value = 'error'
   } finally {
+    isAutoSaving.value = false
     saving.value = false
   }
 }
@@ -225,10 +249,15 @@ function getPathValidation(index) {
 
       <!-- Config summary bar -->
       <div class="config-summary">
-        <span class="summary-text">
-          <strong>{{ config.folders.length }}</strong> dossier(s) configuré(s),
-          <strong>{{ enabledCount }}</strong> actif(s)
-        </span>
+        <div class="summary-left">
+          <span class="summary-text">
+            <strong>{{ config.folders.length }}</strong> dossier(s) configuré(s),
+            <strong>{{ enabledCount }}</strong> actif(s)
+          </span>
+          <span v-if="isAutoSaving" class="auto-save-status saving">⏳ Sauvegarde automatique...</span>
+          <span v-else-if="lastAutoSaveStatus === 'saved'" class="auto-save-status saved">✓ Sauvegardé</span>
+          <span v-else-if="lastAutoSaveStatus === 'error'" class="auto-save-status error">⚠ Échec auto-save</span>
+        </div>
         <div class="summary-actions">
           <button class="action-btn secondary-btn" @click="resetToDefaults">
             ↺ Réinitialiser
@@ -562,6 +591,12 @@ function getPathValidation(index) {
   margin-bottom: 16px;
 }
 
+.summary-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .summary-text {
   font-size: 0.9rem;
   color: var(--text-muted);
@@ -569,6 +604,23 @@ function getPathValidation(index) {
 
 .summary-text strong {
   color: var(--accent);
+}
+
+.auto-save-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.auto-save-status.saving {
+  color: var(--accent);
+}
+
+.auto-save-status.saved {
+  color: var(--success);
+}
+
+.auto-save-status.error {
+  color: var(--danger);
 }
 
 .summary-actions {
