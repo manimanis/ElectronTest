@@ -4,6 +4,7 @@
  */
 import { createRouter, createMemoryHistory } from 'vue-router'
 import CleanerView from '../views/CleanerView.vue'
+import FolderConfigView from '../views/FolderConfigView.vue'
 import AboutView from '../views/AboutView.vue'
 
 const routes = [
@@ -12,6 +13,12 @@ const routes = [
     name: 'cleaner',
     component: CleanerView,
     meta: { title: 'Folder Cleaner' }
+  },
+  {
+    path: '/config',
+    name: 'config',
+    component: FolderConfigView,
+    meta: { title: 'Folder Cleaner - Configuration' }
   },
   {
     path: '/about',

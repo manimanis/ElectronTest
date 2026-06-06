@@ -11,6 +11,317 @@ let mainWindow = null
 let currentScanAbort = false
 
 /**
+ * Configuration file path (stored in user data directory)
+ */
+function getConfigPath() {
+  return path.join(app.getPath('userData'), 'folder-config.json')
+}
+
+/**
+ * Default folder configuration
+ */
+function getDefaultConfig() {
+  const homeDir = os.homedir()
+  return {
+    folders: [
+      { name: 'Desktop', path: path.join(homeDir, 'Desktop'), isRegex: false, enabled: true },
+      { name: 'Documents', path: path.join(homeDir, 'Documents'), isRegex: false, enabled: true },
+      { name: 'Downloads', path: path.join(homeDir, 'Downloads'), isRegex: false, enabled: true }
+    ]
+  }
+}
+
+/**
+ * Load folder configuration from disk
+ */
+function loadConfig() {
+  try {
+    const configPath = getConfigPath()
+    if (fs.existsSync(configPath)) {
+      const data = fs.readFileSync(configPath, 'utf-8')
+      return JSON.parse(data)
+    }
+  } catch (err) {
+    console.error('Failed to load config:', err.message)
+  }
+  return getDefaultConfig()
+}
+
+/**
+ * Save folder configuration to disk
+ */
+function saveConfig(config) {
+  try {
+    const configPath = getConfigPath()
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+    return true
+  } catch (err) {
+    console.error('Failed to save config:', err.message)
+    return false
+  }
+}
+
+/**
+ * Build a resolved path from a base path and a suffix string.
+ * Uses path.join instead of string concatenation for proper path handling.
+ */
+function buildResolvedPath(basePath, suffix) {
+  if (!suffix) return basePath
+  // Remove leading slashes/backslashes from suffix for path.join
+  const cleanSuffix = suffix.replace(/^[/\\]+/, '')
+  if (!cleanSuffix) return basePath
+  return path.join(basePath, cleanSuffix)
+}
+
+/**
+ * Resolve a path entry which can be a wildcard pattern or a full path.
+ * Supports:
+ *   - Full paths: "C:\Users\Alice\Desktop"
+ *   - Single wildcard: "C:\Users\*\Desktop" (wildcard for one directory level)
+ *   - Drive wildcard: "*:\Bac*" (wildcard for drive letter + folder name starts with Bac)
+ *   - Nested wildcards: "C:\Users\*\Desktop\*"
+ * Returns an array of resolved absolute paths.
+ */
+function resolvePathEntry(entry) {
+  if (!entry.isRegex) {
+    // Full path: verify it exists and is a directory
+    try {
+      if (fs.existsSync(entry.path)) {
+        if (fs.statSync(entry.path).isDirectory()) {
+          return [path.normalize(entry.path)]
+        }
+        console.log('config: path is not a directory:', entry.path)
+        return []
+      }
+      console.log('config: path does not exist:', entry.path)
+      return []
+    } catch (err) {
+      console.error('Failed to check path:', entry.path, err.message)
+      return []
+    }
+  }
+
+  const pattern = entry.path
+  if (!pattern || !pattern.includes('*')) {
+    // No wildcard, treat as full path
+    try {
+      if (fs.existsSync(pattern)) {
+        return [path.normalize(pattern)]
+      }
+      return []
+    } catch (err) {
+      return []
+    }
+  }
+
+  console.log('config: resolving pattern:', pattern)
+  try {
+    // Handle all wildcard patterns with the generic recursive resolver
+    const results = resolvePathPatternInternal(pattern)
+    console.log('config: resolved to:', JSON.stringify(results))
+    return results
+  } catch (err) {
+    console.error('Failed to resolve path entry:', entry.path, err.message)
+    return []
+  }
+}
+
+/**
+ * Internal recursive path pattern resolver.
+ * Supports:
+ *   - "*:\..." wildcard drive letter
+ *   - "*\" wildcard at start
+ *   - "..." wildcard in middle/end
+ */
+function resolvePathPatternInternal(pattern) {
+  // Normalize backslashes for consistent processing
+  const normPattern = pattern.replace(/\//g, '\\')
+
+  const starIndex = normPattern.indexOf('*')
+  if (starIndex === -1) {
+    // No more wildcards — just check existence
+    try {
+      if (fs.existsSync(normPattern)) {
+        return [path.normalize(normPattern)]
+      }
+    } catch (_) {}
+    return []
+  }
+
+  // Handle "*:\..." — wildcard drive letter
+  if (normPattern.startsWith('*:\\') || normPattern.startsWith('*:')) {
+    const suffixPattern = normPattern.substring(2) // everything after "*:"
+    const drives = getDriveRoots()
+    const results = []
+    for (const drive of drives) {
+      const driveLetter = drive.replace(/\\/g, '')
+      const fullCandidate = driveLetter + suffixPattern
+      if (fullCandidate.includes('*')) {
+        const subResults = resolvePathPatternInternal(fullCandidate)
+        results.push(...subResults)
+      } else if (!suffixPattern.includes('*')) {
+        try {
+          if (fs.existsSync(fullCandidate)) {
+            results.push(path.normalize(fullCandidate))
+          }
+        } catch (_) { /* skip */ }
+      }
+    }
+    return results
+  }
+
+  // Handle "*\" at start (wildcard after drive is already handled above)
+  if (normPattern.startsWith('*\\')) {
+    // Enumerate all drives as starting points
+    const drives = getDriveRoots()
+    const suffix = normPattern.substring(2) // everything after "*\"
+    const results = []
+    for (const drive of drives) {
+      try {
+        const entries = fs.readdirSync(drive)
+        for (const entry of entries) {
+          const fullPath = path.join(drive, entry)
+          try {
+            if (fs.statSync(fullPath).isDirectory()) {
+              const candidate = path.join(fullPath, suffix)
+              if (candidate.includes('*')) {
+                const subResults = resolvePathPatternInternal(candidate)
+                results.push(...subResults)
+              } else {
+                try {
+                  if (fs.existsSync(candidate)) {
+                    results.push(path.normalize(candidate))
+                  }
+                } catch (_) { /* skip */ }
+              }
+            }
+          } catch (_) { /* skip inaccessible */ }
+        }
+      } catch (_) { /* skip inaccessible drives */ }
+    }
+    return results
+  }
+
+  // General case: split on first *, expand the wildcard level
+  const prefix = normPattern.substring(0, starIndex)
+  const suffix = normPattern.substring(starIndex + 1)
+
+  // Determine if this is a "prefix match" (wildcard within a path segment, e.g. "Bac*")
+  // vs a "directory level" wildcard (e.g. "Users\*\Desktop")
+  const hasPathSepInSuffix = suffix.includes('\\') || suffix.includes('/')
+
+  if (!hasPathSepInSuffix) {
+    // Case: wildcard matches a prefix within a single path segment.
+    // Example: "*:\Bac*" → drive "C:", prefix "Bac" → find all entries starting with "Bac"
+    // Example: "C:\Users\Bac*" → find entries in C:\Users starting with "Bac"
+    // Get the parent directory and the prefix to match
+    const parentDir = path.dirname(prefix)
+    const namePrefix = path.basename(prefix) + suffix
+
+    try {
+      if (!fs.existsSync(parentDir)) {
+        console.log('config: parent dir does not exist:', parentDir)
+        return []
+      }
+
+      const entries = fs.readdirSync(parentDir)
+      const results = []
+      for (const entry of entries) {
+        // Match entries that start with the namePrefix
+        if (entry.toLowerCase().startsWith(namePrefix.toLowerCase())) {
+          const fullPath = path.join(parentDir, entry)
+          try {
+            if (fs.existsSync(fullPath)) {
+              results.push(path.normalize(fullPath))
+            }
+          } catch (_) { /* skip */ }
+        }
+      }
+      return results
+    } catch (_) {
+      return []
+    }
+  }
+
+  // Case: wildcard replaces a full directory level.
+  // Example: "C:\Users\*\Desktop" → for each subdir of C:\Users, check if Desktop exists
+
+  // Verify prefix exists
+  try {
+    if (!fs.existsSync(prefix)) {
+      console.log('config: prefix does not exist:', prefix)
+      return []
+    }
+  } catch (_) {
+    return []
+  }
+
+  const results = []
+
+  // Get entries at the wildcard level
+  let entries
+  try {
+    entries = fs.readdirSync(prefix)
+  } catch (_) {
+    return []
+  }
+
+  for (const entry of entries) {
+    const fullPath = path.join(prefix, entry)
+    try {
+      // Only directories can have sub-paths
+      if (fs.statSync(fullPath).isDirectory()) {
+        const candidate = buildResolvedPath(fullPath, suffix)
+        if (candidate.includes('*')) {
+          const subResults = resolvePathPatternInternal(candidate)
+          results.push(...subResults)
+        } else {
+          try {
+            if (fs.existsSync(candidate)) {
+              results.push(path.normalize(candidate))
+            }
+          } catch (_) { /* skip */ }
+        }
+      }
+    } catch (_) { /* skip inaccessible */ }
+  }
+
+  return results
+}
+
+/**
+ * Get the list of folders to display based on configuration.
+ * Resolves regex patterns and filters enabled folders.
+ * Only directories are included — individual files are excluded from the folder list.
+ */
+function getConfiguredFolders() {
+  const config = loadConfig()
+  const resolvedFolders = []
+
+  for (const entry of config.folders) {
+    if (!entry.enabled) continue
+
+    const resolvedPaths = resolvePathEntry(entry)
+
+    // resolvedPaths is always an array
+    for (const p of resolvedPaths) {
+      // Skip if already added
+      if (resolvedFolders.some(f => f.path === p)) continue
+      // Only include directories, not individual files
+      try {
+        if (fs.statSync(p).isDirectory()) {
+          resolvedFolders.push({ name: path.basename(p), path: p })
+        }
+      } catch (_) {
+        // Skip inaccessible paths
+      }
+    }
+  }
+
+  return resolvedFolders
+}
+
+/**
  * Creates the main application window
  * Uses contextIsolation and preload script for security
  */
@@ -478,7 +789,9 @@ function getDirectorySize(dirPath) {
 }
 
 /**
- * Scan a folder and return non-shortcut files (with their sizes)
+ * Scan a folder and return subdirectories only (no files).
+ * Only directories are included — individual files are excluded from cleaning.
+ * Skips shortcuts (.lnk files) from cleaning operations.
  */
 function scanFolderForCleaning(folderPath) {
   const items = []
@@ -490,20 +803,16 @@ function scanFolderForCleaning(folderPath) {
         const stats = fs.statSync(fullPath)
         // Skip shortcuts (.lnk files) as per requirements
         if (isShortcutOrSymlink(fullPath)) continue
-
-        let size = stats.size
-        if (stats.isDirectory()) {
-          // Calculate total size of directory contents
-          size = getDirectorySize(fullPath)
-        }
+        // Only include directories, not individual files
+        if (!stats.isDirectory()) continue
 
         items.push({
           name: entry,
           path: fullPath,
-          size: size,
-          formattedSize: formatSize(size),
+          size: getDirectorySize(fullPath),
+          formattedSize: formatSize(getDirectorySize(fullPath)),
           modifiedAt: stats.mtime.toISOString(),
-          isDirectory: stats.isDirectory()
+          isDirectory: true
         })
       } catch (e) {
         // Skip inaccessible items
@@ -513,11 +822,8 @@ function scanFolderForCleaning(folderPath) {
     console.warn(`Cannot scan ${folderPath}: ${e.message}`)
   }
 
-  // Sort: folders first, then alphabetically
-  items.sort((a, b) => {
-    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-    return a.name.localeCompare(b.name)
-  })
+  // Sort alphabetically
+  items.sort((a, b) => a.name.localeCompare(b.name))
 
   return items
 }
@@ -588,9 +894,10 @@ function moveToFolder(filePath, targetDir) {
 
 /**
  * Get standard folders and their contents for cleaning
+ * Now uses the configured folders instead of hardcoded ones
  */
 ipcMain.handle('cleaner:getStandardFolders', async () => {
-  const folders = getStandardFolders()
+  const folders = getConfiguredFolders()
   return folders.map(f => ({
     ...f,
     exists: fs.existsSync(f.path),
@@ -900,6 +1207,86 @@ ipcMain.handle('cleaner:deleteShortcuts', async (event, shortcutPaths) => {
     }
   }
   return results
+})
+
+// ============== Configuration IPC Handlers ==============
+
+/**
+ * Helper: safely serialize data for IPC (prevents "An object could not be cloned" errors)
+ */
+function serializeForIpc(data) {
+  try {
+    return JSON.parse(JSON.stringify(data))
+  } catch (err) {
+    console.error('IPC serialization error:', err.message)
+    return null
+  }
+}
+
+/**
+ * Load folder configuration
+ */
+ipcMain.handle('config:load', async () => {
+  try {
+    const config = loadConfig()
+    return serializeForIpc(config)
+  } catch (err) {
+    console.error('config:load error:', err.message)
+    return serializeForIpc({ folders: [] })
+  }
+})
+
+/**
+ * Save folder configuration
+ */
+ipcMain.handle('config:save', async (event, config) => {
+  try {
+    // Sanitize config before saving
+    const safeConfig = serializeForIpc(config)
+    if (!safeConfig || !safeConfig.folders) {
+      console.error('config:save - invalid config received')
+      return false
+    }
+    return saveConfig(safeConfig)
+  } catch (err) {
+    console.error('config:save error:', err.message)
+    return false
+  }
+})
+
+/**
+ * Get the default configuration
+ */
+ipcMain.handle('config:getDefaults', async () => {
+  try {
+    return serializeForIpc(getDefaultConfig())
+  } catch (err) {
+    console.error('config:getDefaults error:', err.message)
+    return serializeForIpc({ folders: [] })
+  }
+})
+
+/**
+ * Validate a folder path or regex pattern
+ * Returns { valid, resolved, error }
+ * resolved is always an array of paths (or empty array)
+ */
+ipcMain.handle('config:validatePath', async (event, entry) => {
+  try {
+    // Sanitize input
+    const safeEntry = serializeForIpc(entry)
+    if (!safeEntry || !safeEntry.path) {
+      return { valid: false, resolved: [], error: 'Entrée invalide' }
+    }
+    const resolved = resolvePathEntry(safeEntry)
+    if (Array.isArray(resolved) && resolved.length > 0) {
+      return serializeForIpc({ valid: true, resolved, error: null })
+    }
+    return serializeForIpc({ valid: false, resolved: [], error: 'Aucun dossier trouvé avec ce chemin ou motif' })
+  } catch (err) {
+    console.error('config:validatePath error:', err.message)
+    return { valid: false, resolved: [], error: err.message }
+  }
 })
 
 // App lifecycle

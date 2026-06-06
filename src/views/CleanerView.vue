@@ -17,6 +17,7 @@ import { ref, computed, onMounted } from 'vue'
 
 const folders = ref([])
 const loading = ref(true)
+const initialLoadDone = ref(false)
 const error = ref('')
 const actionInProgress = ref(false)
 const operationResult = ref('')
@@ -34,9 +35,14 @@ const activeTab = ref(0)
 const sortCriteria = ref({})
 
 onMounted(async () => {
-  await loadFolders()
-  await loadDuplicateShortcuts()
-  await checkRecycleBin()
+  // Only load data on initial mount (once per component lifecycle)
+  // With <keep-alive>, onMounted only fires once — data persists across route changes
+  if (!initialLoadDone.value) {
+    await loadFolders()
+    await loadDuplicateShortcuts()
+    await checkRecycleBin()
+    initialLoadDone.value = true
+  }
 })
 
 async function loadFolders() {
@@ -304,6 +310,42 @@ function toggleAllShortcuts(checked) {
   }
 }
 
+/**
+ * Detects duplicate folder names across the folders list.
+ * Returns a Set of folder paths that have a duplicate name.
+ * Used to show a distinguishing path suffix in the tab when names collide.
+ */
+const duplicateNames = computed(() => {
+  const names = new Map()
+  const dupePaths = new Set()
+  for (const f of folders.value) {
+    if (names.has(f.name)) {
+      dupePaths.add(f.path)
+      dupePaths.add(names.get(f.name))
+    } else {
+      names.set(f.name, f.path)
+    }
+  }
+  return dupePaths
+})
+
+/**
+ * Compute a short distinguishing suffix for a folder tab when multiple folders share the same name.
+ * Extracts the last meaningful path segment (e.g. "C:\Users\Alice\Desktop" → "C:\...\Desktop").
+ */
+function getTabSubtitle(folder) {
+  if (!duplicateNames.value.has(folder.path)) return ''
+  // Get parent directory name as distinguishing hint
+  const parts = folder.path.replace(/\\/g, '/').split('/').filter(Boolean)
+  if (parts.length >= 3) {
+    // Show drive letter + last 2 meaningful segments, e.g. "C:/.../Users/Desktop"
+    const drive = parts[0].endsWith(':') ? parts[0] : ''
+    const lastTwo = parts.slice(-2)
+    return drive ? `${drive}/.../${lastTwo.join('/')}` : `.../${lastTwo.join('/')}`
+  }
+  return folder.path
+}
+
 const recycleBinLabel = computed(() => {
   if (recycleBinEmpty.value) return 'La corbeille est vide.'
   const suffix = recycleBinCount.value !== 1 ? 's' : ''
@@ -481,6 +523,17 @@ async function emptyRecycleBin() {
     actionInProgress.value = false
   }
 }
+
+/**
+ * Manual data refresh — explicitly triggered by user clicking the refresh button.
+ * Reloads all data in the background without blocking the UI.
+ * Existing data remains visible during reload.
+ */
+async function refreshAllData() {
+  await loadFolders()
+  await loadDuplicateShortcuts()
+  await checkRecycleBin()
+}
 </script>
 
 <template>
@@ -502,170 +555,190 @@ async function emptyRecycleBin() {
       <span>{{ error }}</span>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <!-- Initial loading state: only shown when no data has been loaded yet -->
+    <div v-if="loading && folders.length === 0" class="loading-state">
       <div class="spinner"></div>
       <p>Chargement des dossiers...</p>
     </div>
 
-    <template v-if="!loading">
-      <div class="cleaner-layout">
-        <!-- ===== LEFT PANEL: Selection zone ===== -->
-        <div class="selection-panel">
-          <!-- Tabs bar -->
-          <div class="tabs-bar">
-            <button v-for="(folder, index) in folders" :key="folder.path" class="tab-btn"
-              :class="{ active: activeTab === index }" @click="activeTab = index">
-              <span class="tab-icon">&#x1F4C1;</span>
-              <span class="tab-label">{{ folder.name }}</span>
-              <span class="tab-count" :class="{ 'has-selection': getSelectedItemsForFolder(folder.path).length > 0 }">
-                <template v-if="getSelectedItemsForFolder(folder.path).length > 0">
-                  {{ getSelectedItemsForFolder(folder.path).length }}<span class="tab-count-sep">/</span>{{ folder.items.length }}
-                </template>
-                <template v-else>
-                  {{ folder.items.length }}
-                </template>
-              </span>
-            </button>
+    <!-- Background refresh overlay: shown when reloading with data already visible -->
+    <div v-if="loading && folders.length > 0" class="loading-overlay">
+      <div class="spinner small-spinner"></div>
+      <span>Rechargement...</span>
+    </div>
+
+    <!-- Page-level action bar with refresh button -->
+    <div class="page-actions">
+      <button class="action-btn refresh-btn" :disabled="loading || actionInProgress" @click="refreshAllData">
+        <span class="btn-icon">&#x21BB;</span>
+        <span>{{ loading ? 'Rechargement...' : 'Recharger' }}</span>
+      </button>
+    </div>
+
+    <div class="cleaner-layout">
+      <!-- ===== LEFT PANEL: Selection zone ===== -->
+      <div class="selection-panel">
+        <!-- Tabs bar -->
+        <div class="tabs-bar">
+          <button v-for="(folder, index) in folders" :key="folder.path" class="tab-btn"
+            :class="{ active: activeTab === index, 'has-duplicate': duplicateNames.has(folder.path) }" @click="activeTab = index">
+            <span class="tab-icon">&#x1F4C1;</span>
+            <span class="tab-label">{{ folder.name }}</span>
+            <span v-if="getTabSubtitle(folder)" class="tab-subtitle" :title="folder.path">{{ getTabSubtitle(folder) }}</span>
+            <span class="tab-count" :class="{ 'has-selection': getSelectedItemsForFolder(folder.path).length > 0 }">
+              <template v-if="getSelectedItemsForFolder(folder.path).length > 0">
+                {{ getSelectedItemsForFolder(folder.path).length }}<span class="tab-count-sep">/</span>{{ folder.items.length }}
+              </template>
+              <template v-else>
+                {{ folder.items.length }}
+              </template>
+            </span>
+          </button>
+        </div>
+
+        <!-- Active folder content -->
+        <template v-if="folders.length > 0">
+          <div class="folder-panel">
+            <p class="active-folder-info"><strong>Dossier actif :</strong> {{ folders[activeTab].path }}</p>
+            <div class="folder-sort">
+              <button v-for="field in ['name', 'size', 'type']" :key="field" class="sort-btn" :class="{
+                active: isSortedBy(folders[activeTab].path, field),
+                'sort-primary': getSortPriority(folders[activeTab].path, field) === 1,
+                'sort-secondary': getSortPriority(folders[activeTab].path, field) === 2,
+                'sort-tertiary': getSortPriority(folders[activeTab].path, field) === 3
+              }" @click="toggleSort(folders[activeTab].path, field, $event)">
+                <span class="sort-label">{{ field === 'name' ? 'Nom' : field === 'size' ? 'Taille' : 'Type' }}</span>
+                <span class="sort-icon">
+                  <template v-if="getSortPriority(folders[activeTab].path, field) > 0">
+                    {{ getSortOrder(folders[activeTab].path, field) === 'asc' ? '▲' : '▼' }}
+                    <span class="sort-priority">{{ getSortPriority(folders[activeTab].path, field) }}</span>
+                  </template>
+                  <template v-else>&#x21C5;</template>
+                </span>
+              </button>
+            </div>
+
+            <div v-if="folders[activeTab].items.length > 0" class="select-all-row">
+              <label class="checkbox-label select-all">
+                <input type="checkbox"
+                  :checked="getSelectedItemsForFolder(folders[activeTab].path).length === folders[activeTab].items.length && folders[activeTab].items.length > 0"
+                  :indeterminate="getSelectedItemsForFolder(folders[activeTab].path).length > 0 && getSelectedItemsForFolder(folders[activeTab].path).length < folders[activeTab].items.length"
+                  @change="toggleAll(folders[activeTab].path, $event.target.checked)" />
+                <span>Sélectionner tout</span>
+              </label>
+            </div>
+
+            <div v-if="folders[activeTab].items.length > 0" class="items-list">
+              <div v-for="item in getSortedItems(folders[activeTab])" :key="item.path" class="item-row"
+                :class="{ selected: selectedItems[folders[activeTab].path]?.has(item.path) }">
+                <label class="checkbox-label">
+                  <input type="checkbox" :checked="selectedItems[folders[activeTab].path]?.has(item.path) || false"
+                    @change="toggleItem(folders[activeTab].path, item.path)" />
+                  <span class="item-icon">{{ item.isDirectory ? '&#x1F4C2;' : '&#x1F4C4;' }}</span>
+                  <span class="item-name">{{ item.name }}</span>
+                </label>
+                <span class="item-size">{{ item.formattedSize }}</span>
+              </div>
+            </div>
+
+            <div v-else class="empty-state">
+              <span class="empty-text">Ce dossier est vide ou ne contient que des raccourcis</span>
+            </div>
+          </div>
+        </template>
+
+        <!-- Empty state when no folders at all -->
+        <div v-if="folders.length === 0 && !loading" class="empty-state no-folders">
+          <span class="empty-icon">&#x1F4C1;</span>
+          <span class="empty-text">Aucun dossier trouvé. Vérifiez la configuration des dossiers ou rechargez.</span>
+        </div>
+
+        <div class="recycle-bin-bar" :class="{ 'recycle-empty': recycleBinEmpty }">
+          <div class="recycle-bin-info">
+            <span class="recycle-icon">&#x1F5D1;</span>
+            <span>{{ recycleBinLabel }}</span>
+          </div>
+          <button class="action-btn recycle-btn" :disabled="actionInProgress || recycleBinEmpty"
+            @click="emptyRecycleBin">Vider la corbeille</button>
+        </div>
+
+        <div v-if="showShortcutSection && duplicateShortcuts.length > 0" class="shortcuts-section">
+          <div class="section-header">
+            <h2>Raccourcis dupliqués sur le bureau</h2>
+            <p class="section-subtitle">Les raccourcis suivants ont des doublons (même application). Conservez le plus
+              récent et supprimez les autres.</p>
           </div>
 
-          <!-- Active folder content -->
-          <template v-if="folders.length > 0">
-            <div class="folder-panel">
-              <p class="active-folder-info"><strong>Dossier actif :</strong> {{ folders[activeTab].path }}</p>
-              <div class="folder-sort">
-                <button v-for="field in ['name', 'size', 'type']" :key="field" class="sort-btn" :class="{
-                  active: isSortedBy(folders[activeTab].path, field),
-                  'sort-primary': getSortPriority(folders[activeTab].path, field) === 1,
-                  'sort-secondary': getSortPriority(folders[activeTab].path, field) === 2,
-                  'sort-tertiary': getSortPriority(folders[activeTab].path, field) === 3
-                }" @click="toggleSort(folders[activeTab].path, field, $event)">
-                  <span class="sort-label">{{ field === 'name' ? 'Nom' : field === 'size' ? 'Taille' : 'Type' }}</span>
-                  <span class="sort-icon">
-                    <template v-if="getSortPriority(folders[activeTab].path, field) > 0">
-                      {{ getSortOrder(folders[activeTab].path, field) === 'asc' ? '▲' : '▼' }}
-                      <span class="sort-priority">{{ getSortPriority(folders[activeTab].path, field) }}</span>
-                    </template>
-                    <template v-else>⇅</template>
-                  </span>
-                </button>
-              </div>
+          <div v-if="loadingShortcuts" class="loading-state small">
+            <div class="spinner"></div>
+            <p>Recherche des raccourcis...</p>
+          </div>
 
-              <div v-if="folders[activeTab].items.length > 0" class="select-all-row">
-                <label class="checkbox-label select-all">
-                  <input type="checkbox"
-                    :checked="getSelectedItemsForFolder(folders[activeTab].path).length === folders[activeTab].items.length && folders[activeTab].items.length > 0"
-                    :indeterminate="getSelectedItemsForFolder(folders[activeTab].path).length > 0 && getSelectedItemsForFolder(folders[activeTab].path).length < folders[activeTab].items.length"
-                    @change="toggleAll(folders[activeTab].path, $event.target.checked)" />
-                  <span>Sélectionner tout</span>
+          <template v-if="!loadingShortcuts">
+            <div class="shortcut-toolbar">
+              <label class="checkbox-label select-all">
+                <input type="checkbox"
+                  :checked="duplicateShortcuts.length > 0 && duplicateShortcuts.every(s => s.selected)"
+                  @change="toggleAllShortcuts($event.target.checked)" />
+                <span>Sélectionner tous les doublons</span>
+              </label>
+              <button class="action-btn delete-btn small"
+                :disabled="actionInProgress || duplicateShortcuts.every(s => !s.selected)"
+                @click="deleteSelectedShortcuts">Supprimer la sélection</button>
+            </div>
+
+            <div class="shortcuts-list">
+              <div v-for="sc in duplicateShortcuts" :key="sc.path" class="shortcut-row"
+                :class="{ selected: sc.selected }">
+                <label class="checkbox-label">
+                  <input type="checkbox" :checked="sc.selected || false" @change="toggleShortcut(sc.path)" />
+                  <span class="item-icon">&#x1F517;</span>
+                  <span class="item-name">{{ sc.name }}</span>
                 </label>
-              </div>
-
-              <div v-if="folders[activeTab].items.length > 0" class="items-list">
-                <div v-for="item in getSortedItems(folders[activeTab])" :key="item.path" class="item-row"
-                  :class="{ selected: selectedItems[folders[activeTab].path]?.has(item.path) }">
-                  <label class="checkbox-label">
-                    <input type="checkbox" :checked="selectedItems[folders[activeTab].path]?.has(item.path) || false"
-                      @change="toggleItem(folders[activeTab].path, item.path)" />
-                    <span class="item-icon">{{ item.isDirectory ? '&#x1F4C2;' : '&#x1F4C4;' }}</span>
-                    <span class="item-name">{{ item.name }}</span>
-                  </label>
-                  <span class="item-size">{{ item.formattedSize }}</span>
-                </div>
-              </div>
-
-              <div v-else class="empty-state">
-                <span class="empty-text">Ce dossier est vide ou ne contient que des raccourcis</span>
+                <span class="item-size">{{ sc.targetName }}</span>
               </div>
             </div>
           </template>
-
-          <div class="recycle-bin-bar" :class="{ 'recycle-empty': recycleBinEmpty }">
-            <div class="recycle-bin-info">
-              <span class="recycle-icon">&#x1F5D1;</span>
-              <span>{{ recycleBinLabel }}</span>
-            </div>
-            <button class="action-btn recycle-btn" :disabled="actionInProgress || recycleBinEmpty"
-              @click="emptyRecycleBin">Vider la corbeille</button>
-          </div>
-
-          <div v-if="showShortcutSection && duplicateShortcuts.length > 0" class="shortcuts-section">
-            <div class="section-header">
-              <h2>Raccourcis dupliqués sur le bureau</h2>
-              <p class="section-subtitle">Les raccourcis suivants ont des doublons (même application). Conservez le plus
-                récent et supprimez les autres.</p>
-            </div>
-
-            <div v-if="loadingShortcuts" class="loading-state small">
-              <div class="spinner"></div>
-              <p>Recherche des raccourcis...</p>
-            </div>
-
-            <template v-if="!loadingShortcuts">
-              <div class="shortcut-toolbar">
-                <label class="checkbox-label select-all">
-                  <input type="checkbox"
-                    :checked="duplicateShortcuts.length > 0 && duplicateShortcuts.every(s => s.selected)"
-                    @change="toggleAllShortcuts($event.target.checked)" />
-                  <span>Sélectionner tous les doublons</span>
-                </label>
-                <button class="action-btn delete-btn small"
-                  :disabled="actionInProgress || duplicateShortcuts.every(s => !s.selected)"
-                  @click="deleteSelectedShortcuts">Supprimer la sélection</button>
-              </div>
-
-              <div class="shortcuts-list">
-                <div v-for="sc in duplicateShortcuts" :key="sc.path" class="shortcut-row"
-                  :class="{ selected: sc.selected }">
-                  <label class="checkbox-label">
-                    <input type="checkbox" :checked="sc.selected || false" @change="toggleShortcut(sc.path)" />
-                    <span class="item-icon">&#x1F517;</span>
-                    <span class="item-name">{{ sc.name }}</span>
-                  </label>
-                  <span class="item-size">{{ sc.targetName }}</span>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- ===== RIGHT PANEL: Action zone ===== -->
-        <div class="action-panel">
-          <div class="selection-info-box">
-            <span class="selection-label">Sélection</span>
-            <span class="selection-count">{{ totalSelected }} élément(s)</span>
-            <span class="selection-size">{{ totalSelectedSize }}</span>
-          </div>
-
-          <div class="action-buttons-list">
-            <button class="action-btn-full unselect-all-btn" :disabled="actionInProgress || totalSelected === 0"
-              @click="unselectAll">
-              <span class="btn-icon">✕</span>
-              <span>Désélectionner tout</span>
-            </button>
-
-            <div class="action-separator"></div>
-
-            <button class="action-btn-full archive-btn" :disabled="actionInProgress || totalSelected === 0"
-              @click="archiveSelected">
-              <span class="btn-icon">📦</span>
-              <span>Archiver en 7z...</span>
-            </button>
-
-            <button class="action-btn-full move-btn" :disabled="actionInProgress || totalSelected === 0"
-              @click="executeAction('moveToFolder')">
-              <span class="btn-icon">📁</span>
-              <span>Déplacer vers un dossier...</span>
-            </button>
-
-            <button class="action-btn-full trash-btn" :disabled="actionInProgress || totalSelected === 0"
-              @click="executeAction('trash')">
-              <span class="btn-icon">🗑️</span>
-              <span>Mettre à la corbeille...</span>
-            </button>
-          </div>
         </div>
       </div>
-    </template>
+
+      <!-- ===== RIGHT PANEL: Action zone ===== -->
+      <div class="action-panel">
+        <div class="selection-info-box">
+          <span class="selection-label">Sélection</span>
+          <span class="selection-count">{{ totalSelected }} élément(s)</span>
+          <span class="selection-size">{{ totalSelectedSize }}</span>
+        </div>
+
+        <div class="action-buttons-list">
+          <button class="action-btn-full unselect-all-btn" :disabled="actionInProgress || totalSelected === 0"
+            @click="unselectAll">
+            <span class="btn-icon">&#x2715;</span>
+            <span>Désélectionner tout</span>
+          </button>
+
+          <div class="action-separator"></div>
+
+          <button class="action-btn-full archive-btn" :disabled="actionInProgress || totalSelected === 0"
+            @click="archiveSelected">
+            <span class="btn-icon">&#x1F4E6;</span>
+            <span>Archiver en 7z...</span>
+          </button>
+
+          <button class="action-btn-full move-btn" :disabled="actionInProgress || totalSelected === 0"
+            @click="executeAction('moveToFolder')">
+            <span class="btn-icon">&#x1F4C1;</span>
+            <span>Déplacer vers un dossier...</span>
+          </button>
+
+          <button class="action-btn-full trash-btn" :disabled="actionInProgress || totalSelected === 0"
+            @click="executeAction('trash')">
+            <span class="btn-icon">&#x1F5D1;</span>
+            <span>Mettre à la corbeille...</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -918,101 +991,123 @@ async function emptyRecycleBin() {
   font-size: 0.8rem;
 }
 
-/* Tabs bar */
+/* ===== MODERN TABS ===== */
 .tabs-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 0;
-  overflow-x: auto;
-  padding-bottom: 0;
-}
-
-.tabs-bar::-webkit-scrollbar {
-  height: 4px;
-}
-
-.tabs-bar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tabs-bar::-webkit-scrollbar-thumb {
-  background: #2a2a3e;
-  border-radius: 2px;
+  overflow: visible;
+  padding: 10px 12px 6px;
+  background: #151528;
+  border: 1px solid #2a2a3e;
+  border-radius: 12px 12px 0 0;
+  border-bottom: none;
 }
 
 .tab-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 16px;
-  border: 1px solid #2a2a3e;
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  background: #151528;
-  color: #888;
-  font-size: 0.85rem;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #666;
+  font-size: 0.82rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   white-space: nowrap;
-  position: relative;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  line-height: 1.3;
 }
 
 .tab-btn:hover {
-  background: #1a1a2e;
+  background: rgba(108, 99, 255, 0.08);
+  border-color: rgba(108, 99, 255, 0.15);
   color: #aaa;
-  border-color: #3a3a5e;
 }
 
 .tab-btn.active {
-  background: #1a1a2e;
-  border-color: #6c63ff;
+  background: rgba(108, 99, 255, 0.15);
+  border-color: rgba(108, 99, 255, 0.3);
   color: #fff;
-  z-index: 1;
 }
 
 .tab-icon {
-  font-size: 1rem;
+  font-size: 0.95rem;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.tab-btn.active .tab-icon {
+  opacity: 1;
+}
+
+.tab-label {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-subtitle {
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: #777;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.tab-btn.active .tab-subtitle {
+  color: #9988dd;
 }
 
 .tab-count {
-  font-size: 0.7rem;
-  background: #2a2a3e;
-  color: #888;
-  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  color: #666;
+  border-radius: 5px;
   padding: 1px 6px;
-  min-width: 18px;
+  min-width: 16px;
   text-align: center;
+  line-height: 1.4;
+  flex-shrink: 0;
 }
 
 .tab-btn.active .tab-count {
-  background: #6c63ff;
-  color: #fff;
+  background: rgba(108, 99, 255, 0.25);
+  color: #b8b4ff;
 }
 
 .tab-count.has-selection {
-  background: #27ae60;
-  color: #fff;
+  background: rgba(39, 174, 96, 0.2);
+  color: #6fcf97;
+}
+
+.tab-btn.active .tab-count.has-selection {
+  background: rgba(39, 174, 96, 0.3);
+  color: #8fefb7;
 }
 
 .tab-count-sep {
-  opacity: 0.6;
-  margin: 0 1px;
+  opacity: 0.4;
+  margin: 0 2px;
+  font-weight: 400;
 }
 
-/* Active folder panel */
+/* Folder panel (below tabs) */
 .folder-panel {
   background: #1a1a2e;
   border: 1px solid #2a2a3e;
-  border-top: 1px solid #6c63ff;
   border-radius: 0 0 10px 10px;
   padding: 16px;
   margin-bottom: 24px;
-}
-
-.folder-panel:only-of-type {
-  border-top-width: 1px;
-  border-top-color: #2a2a3e;
 }
 
 .active-folder-info {
@@ -1177,9 +1272,93 @@ async function emptyRecycleBin() {
   font-family: 'Consolas', monospace;
 }
 
+/* ===== PAGE ACTIONS (Refresh button) ===== */
+.page-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: #1a2a3d;
+  border: 1px solid #2a4a5e;
+  border-radius: 6px;
+  color: #6fa8cf;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #1a3a4a;
+  border-color: #3a6a8e;
+  color: #7fc0e0;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===== Loading overlay (background refresh) ===== */
+.loading-overlay {
+  position: fixed;
+  top: 70px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: #1a1a2e;
+  border: 1px solid #6c63ff;
+  border-radius: 8px;
+  color: #6c63ff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  z-index: 1000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: overlay-in 0.3s ease-out;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.small-spinner {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
+/* ===== No folders empty state ===== */
+.no-folders {
+  background: #1a1a2e;
+  border: 1px solid #2a2a3e;
+  border-radius: 10px;
+  margin-bottom: 24px;
+}
+
 .empty-state {
   padding: 48px 8px;
   text-align: center;
+}
+
+.empty-icon {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 8px;
 }
 
 .empty-text {

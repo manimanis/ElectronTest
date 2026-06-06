@@ -33,6 +33,13 @@ function navigateTo(routeName) {
         </button>
         <button
           class="nav-link"
+          :class="{ active: $route.name === 'config' }"
+          @click="navigateTo('config')"
+        >
+          ⚙️ Dossiers
+        </button>
+        <button
+          class="nav-link"
           :class="{ active: $route.name === 'about' }"
           @click="navigateTo('about')"
         >
@@ -42,8 +49,13 @@ function navigateTo(routeName) {
     </nav>
 
     <!-- Page content rendered by Vue Router -->
+    <!-- Keep-alive preserves component state across route changes (no data reload) -->
     <main class="app-main">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <keep-alive>
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
     </main>
   </div>
 </template>

@@ -71,5 +71,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Archive selected items to a 7z file
   // If destDir is provided, saves directly there without a dialog
-  archiveTo7z: (items, destDir) => ipcRenderer.invoke('cleaner:archiveTo7z', items, destDir)
+  archiveTo7z: (items, destDir) => ipcRenderer.invoke('cleaner:archiveTo7z', items, destDir),
+
+  // ============== Configuration API ==============
+
+  // Load folder configuration
+  loadFolderConfig: () => ipcRenderer.invoke('config:load'),
+
+  // Save folder configuration
+  saveFolderConfig: (config) => ipcRenderer.invoke('config:save', JSON.parse(config) || { folders: []}),
+
+  // Get default configuration
+  getDefaultFolderConfig: () => ipcRenderer.invoke('config:getDefaults'),
+
+  // Validate a folder path or regex pattern
+  validateFolderPath: (entry) => ipcRenderer.invoke('config:validatePath', entry)
 })
