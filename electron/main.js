@@ -582,18 +582,26 @@ ipcMain.handle('cleaner:findDuplicateShortcuts', async () => {
 async function isRecycleBinEmpty() {
   const { execSync } = require('child_process')
 
-  try {
-    // Use PowerShell to count items in the Recycle Bin
-    const output = execSync(
-      'powershell -NoProfile -Command "& {(New-Object -ComObject Shell.Application).NameSpace(0x0a).Items().Count}"',
-      { timeout: 10000, windowsHide: true, encoding: 'utf-8' }
-    )
-    const count = parseInt(output.trim(), 10)
-    return { success: true, isEmpty: count === 0, count: count || 0 }
-  } catch (err) {
-    // Fallback VBScript approach
+  function powerShellCount() {
+    let count = 0, success = false
     try {
-      const tmpFile = path.join(os.tmpdir(), `check_recycle_bin_${Date.now()}.vbs`)
+      // Use PowerShell to count items in the Recycle Bin
+      const output = execSync(
+        'powershell -NoProfile -Command "& {(New-Object -ComObject Shell.Application).NameSpace(0x0a).Items().Count}"',
+        { timeout: 10000, windowsHide: true, encoding: 'utf-8' }
+      )
+      count = parseInt(output.trim())
+      success = true
+    } catch (err) {
+      success = false
+    }
+    return { success, count }
+  }
+
+  function vbsCount() {
+    let count = 0, success = false, tmpFile = null
+    try {
+      tmpFile = path.join(os.tmpdir(), `check_recycle_bin_${Date.now()}.vbs`)
       const vbsContent = `
 Set objShell = CreateObject("Shell.Application")
 Set objFolder = objShell.NameSpace(&H0a&)
@@ -605,14 +613,21 @@ WScript.Echo objFolder.Items().Count
         windowsHide: true,
         encoding: 'utf-8'
       })
-      const count = parseInt(output.trim(), 10)
-      return { success: true, isEmpty: count === 0, count: count || 0 }
-    } catch (err2) {
-      return { success: false, isEmpty: false, count: 0, error: err2.message }
+      count = parseInt(output.trim())
+      success = true
+    } catch (err) {
+      success = false
     } finally {
       try { if (tmpFile) fs.unlinkSync(tmpFile) } catch (e) { /* ignore */ }
     }
+    return { success, count }
   }
+
+  let result = powerShellCount()
+  if (!result.success) {
+    result = vbsCount()
+  }
+  return result
 }
 
 /**
@@ -622,39 +637,54 @@ WScript.Echo objFolder.Items().Count
 async function emptyRecycleBin() {
   const { execSync } = require('child_process')
 
-  // Generate a unique VBScript file to run the operation silently
-  const tmpFile = path.join(os.tmpdir(), `empty_recycle_bin_${Date.now()}.vbs`)
-  const vbsContent = `
+  function powerShellEmpty() {
+    let success = false, 
+      error = ''
+    try {
+      execSync(
+        'powershell -Command "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"',
+        { timeout: 30000, windowsHide: true }
+      )
+      success = true
+      error = ''
+    } catch (err) {
+      success = false
+      error = err.message
+    }
+    return { success, error }
+  }
+
+  function vbsEmpty() {
+    let tmpFile = null,
+      success = false,
+      error = ''
+    try {
+      tmpFile = path.join(os.tmpdir(), `empty_recycle_bin_${Date.now()}.vbs`)
+      const vbsContent = `
 Set objShell = CreateObject("Shell.Application")
 Set objFolder = objShell.NameSpace(&H0a&)
 objFolder.Items().InvokeVerbEx("delete")
 `.trim()
-
-  try {
-    fs.writeFileSync(tmpFile, vbsContent)
-
-    // Run the VBScript silently using CScript
-    execSync(`cscript //NoLogo "${tmpFile}"`, {
-      timeout: 30000,
-      windowsHide: true
-    })
-
-    return { success: true, message: 'Recycle Bin emptied successfully' }
-  } catch (err) {
-    // Fallback: try direct PowerShell COM approach with confirmation suppression
-    try {
-      execSync(
-        'powershell -NoProfile -Command "$shell = New-Object -ComObject Shell.Application; $shell.NameSpace(0x0a).Items() | %%{ $_.InvokeVerbEx(\'delete\') }"',
-        { timeout: 30000, windowsHide: true }
-      )
-      return { success: true, message: 'Recycle Bin emptied successfully' }
-    } catch (err2) {
-      return { success: false, message: `Failed to empty Recycle Bin: ${err2.message}` }
+      fs.writeFileSync(tmpFile, vbsContent)
+      execSync(`cscript //NoLogo "${tmpFile}"`, {
+        timeout: 30000,
+        windowsHide: true
+      })
+      success = true
+      error = ''
+    } catch (err) {
+      error = err.message
+    } finally {
+      try { if (tmpFile) fs.unlinkSync(tmpFile) } catch (e) { /* ignore */ }
     }
-  } finally {
-    // Clean up temp file
-    try { fs.unlinkSync(tmpFile) } catch (e) { /* ignore */ }
+    return { success, error }
   }
+
+  let result = powerShellEmpty()
+  if (!result.success) {
+    result = vbsEmpty()
+  }
+  return result
 }
 
 /**
