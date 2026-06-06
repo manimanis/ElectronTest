@@ -355,22 +355,22 @@ function getPathValidation(index) {
 
 .page-header h1 {
   font-size: 1.6rem;
-  color: #ffffff;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .page-subtitle {
-  color: #888;
+  color: var(--text-dim);
   font-size: 0.9rem;
   line-height: 1.5;
 }
 
 .page-subtitle code {
-  background: #2a2a3e;
+  background: var(--bg-tertiary);
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.85rem;
-  color: #6c63ff;
+  color: var(--accent);
 }
 
 /* ===== Toast notification ===== */
@@ -392,15 +392,15 @@ function getPathValidation(index) {
 }
 
 .toast-notification.success {
-  background: #1a3a1a;
-  border: 1px solid #27ae60;
-  color: #6fcf97;
+  background: var(--success-bg);
+  border: 1px solid var(--success);
+  color: var(--success);
 }
 
 .toast-notification.error {
-  background: #3d1a1a;
-  border: 1px solid #e74c3c;
-  color: #ff6b6b;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  color: var(--danger);
 }
 
 .toast-icon {
@@ -448,12 +448,12 @@ function getPathValidation(index) {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #3d1a1a;
-  border: 1px solid #e74c3c;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 16px;
-  color: #ff6b6b;
+  color: var(--danger);
   font-size: 0.9rem;
 }
 
@@ -472,15 +472,15 @@ function getPathValidation(index) {
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  color: #888;
+  color: var(--text-dim);
   gap: 16px;
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid #2a2a3e;
-  border-top-color: #6c63ff;
+  border: 4px solid var(--border-color);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -491,8 +491,8 @@ function getPathValidation(index) {
 
 /* ===== Examples panel ===== */
 .examples-panel {
-  background: #151528;
-  border: 1px solid #2a2a3e;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 16px;
   margin-bottom: 16px;
@@ -500,7 +500,7 @@ function getPathValidation(index) {
 
 .examples-panel h3 {
   font-size: 0.85rem;
-  color: #888;
+  color: var(--text-dim);
   margin-bottom: 10px;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -517,23 +517,23 @@ function getPathValidation(index) {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: #1a1a2e;
-  border: 1px solid #2a2a3e;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
-  color: #aaa;
+  color: var(--text-muted);
   font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .example-chip:hover {
-  border-color: #6c63ff;
-  background: #222240;
-  color: #ddd;
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
 }
 
 .chip-icon {
-  color: #6c63ff;
+  color: var(--accent);
   font-weight: bold;
   font-size: 0.9rem;
 }
@@ -543,11 +543,11 @@ function getPathValidation(index) {
 }
 
 .chip-pattern {
-  background: #2a2a3e;
+  background: var(--bg-tertiary);
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.75rem;
-  color: #6c63ff;
+  color: var(--accent);
 }
 
 /* ===== Config summary ===== */
@@ -556,19 +556,19 @@ function getPathValidation(index) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: #1a1a2e;
-  border: 1px solid #2a2a3e;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   margin-bottom: 16px;
 }
 
 .summary-text {
   font-size: 0.9rem;
-  color: #aaa;
+  color: var(--text-muted);
 }
 
 .summary-text strong {
-  color: #6c63ff;
+  color: var(--accent);
 }
 
 .summary-actions {
@@ -592,39 +592,40 @@ function getPathValidation(index) {
 }
 
 .primary-btn {
-  background: #6c63ff;
+  background: var(--accent);
   color: #fff;
 }
 
 .primary-btn:hover:not(:disabled) {
-  background: #5a52e0;
+  background: var(--border-focus);
 }
 
 .secondary-btn {
-  background: #2a2a3e;
-  color: #888;
+  background: var(--bg-tertiary);
+  color: var(--text-dim);
 }
 
 .secondary-btn:hover:not(:disabled) {
-  background: #3a3a4e;
-  color: #aaa;
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 
 .add-btn {
-  background: #1a3a1a;
-  color: #6fcf97;
+  background: var(--success-bg);
+  color: var(--success);
   padding: 12px 24px;
   font-size: 0.9rem;
+  border: 1px solid transparent;
 }
 
 .add-btn:hover {
-  background: #1a4a2a;
+  background: rgba(39, 174, 96, 0.15);
 }
 
 /* ===== Folder cards ===== */
 .folder-card {
-  background: #1a1a2e;
-  border: 1px solid #2a2a3e;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   margin-bottom: 8px;
   transition: all 0.2s;
@@ -632,11 +633,11 @@ function getPathValidation(index) {
 }
 
 .folder-card:hover {
-  border-color: #3a3a5e;
+  border-color: var(--bg-hover);
 }
 
 .folder-card.expanded {
-  border-color: #6c63ff;
+  border-color: var(--accent);
 }
 
 .folder-card.disabled {
@@ -665,7 +666,7 @@ function getPathValidation(index) {
 }
 
 .drag-handle {
-  color: #444;
+  color: var(--text-dim);
   font-size: 1.1rem;
   margin-right: 4px;
   cursor: grab;
@@ -675,27 +676,27 @@ function getPathValidation(index) {
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: #6c63ff;
+  accent-color: var(--accent);
 }
 
 .folder-name {
   font-weight: 600;
-  color: #ddd;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   white-space: nowrap;
 }
 
 .folder-name.unnamed {
-  color: #666;
+  color: var(--text-dim);
   font-style: italic;
 }
 
 .folder-path-display {
-  background: #2a2a3e;
+  background: var(--bg-tertiary);
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -707,14 +708,14 @@ function getPathValidation(index) {
   font-size: 0.7rem;
   padding: 2px 8px;
   border-radius: 10px;
-  background: #2a2a3e;
-  color: #888;
+  background: var(--bg-tertiary);
+  color: var(--text-dim);
   white-space: nowrap;
 }
 
 .folder-badge.regex {
-  background: #3d2a1a;
-  color: #ffb86b;
+  background: rgba(255, 184, 107, 0.12);
+  color: var(--warning);
 }
 
 .card-actions {
@@ -735,34 +736,34 @@ function getPathValidation(index) {
 }
 
 .remove-btn {
-  color: #ff6b6b;
+  color: var(--danger);
   opacity: 0.6;
 }
 
 .remove-btn:hover {
-  background: #3d1a1a;
+  background: var(--danger-bg);
   opacity: 1;
 }
 
 .browse-btn {
-  color: #6c63ff;
+  color: var(--accent);
   font-size: 1.1rem;
   padding: 6px;
 }
 
 .browse-btn:hover {
-  background: #222240;
+  background: var(--bg-hover);
 }
 
 .expand-icon {
-  color: #555;
+  color: var(--text-dim);
   font-size: 0.7rem;
 }
 
 /* ===== Card body ===== */
 .card-body {
   padding: 0 16px 16px;
-  border-top: 1px solid #2a2a3e;
+  border-top: 1px solid var(--border-color);
 }
 
 .form-group {
@@ -772,7 +773,7 @@ function getPathValidation(index) {
 .form-label {
   display: block;
   font-size: 0.8rem;
-  color: #aaa;
+  color: var(--text-muted);
   margin-bottom: 6px;
   font-weight: 500;
 }
@@ -780,30 +781,30 @@ function getPathValidation(index) {
 .label-hint {
   font-weight: normal;
   font-size: 0.75rem;
-  color: #666;
+  color: var(--text-dim);
 }
 
 .label-hint code {
-  background: #2a2a3e;
+  background: var(--bg-tertiary);
   padding: 0 4px;
   border-radius: 2px;
-  color: #6c63ff;
+  color: var(--accent);
 }
 
 .form-input {
   width: 100%;
   padding: 10px 12px;
-  background: #0f0f1a;
-  border: 1px solid #2a2a3e;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
-  color: #e0e0e0;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   transition: border-color 0.2s;
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #6c63ff;
+  border-color: var(--accent);
 }
 
 .form-input.mono {
@@ -832,17 +833,17 @@ function getPathValidation(index) {
 }
 
 .path-validation.valid {
-  color: #6fcf97;
-  background: rgba(39, 174, 96, 0.08);
+  color: var(--success);
+  background: var(--success-bg);
 }
 
 .path-validation.error {
-  color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.08);
+  color: var(--danger);
+  background: var(--danger-bg);
 }
 
 .path-validation.checking {
-  color: #888;
+  color: var(--text-dim);
 }
 
 .val-icon { flex-shrink: 0; }
@@ -850,11 +851,11 @@ function getPathValidation(index) {
 .val-icon.spin { animation: spin 1s linear infinite; display: inline-block; }
 
 .path-valid {
-  border-color: #27ae60 !important;
+  border-color: var(--success) !important;
 }
 
 .path-invalid {
-  border-color: #e74c3c !important;
+  border-color: var(--danger) !important;
 }
 
 .checkbox-group {
@@ -865,7 +866,7 @@ function getPathValidation(index) {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #ccc;
+  color: var(--text-muted);
   font-size: 0.85rem;
   cursor: pointer;
 }
@@ -873,30 +874,30 @@ function getPathValidation(index) {
 .checkbox-label-inline input[type="checkbox"] {
   width: 18px;
   height: 18px;
-  accent-color: #6c63ff;
+  accent-color: var(--accent);
   cursor: pointer;
 }
 
 .checkbox-label-inline code {
-  background: #2a2a3e;
+  background: var(--bg-tertiary);
   padding: 0 4px;
   border-radius: 2px;
-  color: #6c63ff;
+  color: var(--accent);
 }
 
 .form-help {
   font-size: 0.75rem;
-  color: #666;
+  color: var(--text-dim);
   margin-top: 6px;
   line-height: 1.5;
   padding-left: 26px;
 }
 
 .form-help code {
-  background: #2a2a3e;
+  background: var(--bg-tertiary);
   padding: 0 4px;
   border-radius: 2px;
-  color: #6c63ff;
+  color: var(--accent);
 }
 
 /* ===== Empty state ===== */
@@ -905,7 +906,7 @@ function getPathValidation(index) {
   flex-direction: column;
   align-items: center;
   padding: 40px 20px;
-  color: #666;
+  color: var(--text-dim);
   gap: 12px;
 }
 

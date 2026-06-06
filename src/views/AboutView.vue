@@ -69,29 +69,29 @@
 }
 
 .about-card {
-  background: #1a1a2e;
-  border: 1px solid #2a2a3e;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 32px;
 }
 
 .about-title {
   font-size: 1.8rem;
-  color: #ffffff;
+  color: var(--text-primary);
   text-align: center;
   margin-bottom: 4px;
 }
 
 .about-version {
   text-align: center;
-  color: #6c63ff;
+  color: var(--accent);
   font-size: 0.9rem;
   font-family: 'Consolas', monospace;
   margin-bottom: 20px;
 }
 
 .about-description {
-  color: #aaa;
+  color: var(--text-muted);
   font-size: 0.95rem;
   line-height: 1.6;
   text-align: center;
@@ -109,10 +109,10 @@
 .features-section h2,
 .author-section h2 {
   font-size: 1.1rem;
-  color: #e0e0e0;
+  color: var(--text-secondary);
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #2a2a3e;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .tech-list,
@@ -124,17 +124,17 @@
 .tech-list li,
 .features-list li {
   padding: 6px 0;
-  color: #bbb;
+  color: var(--text-muted);
   font-size: 0.9rem;
   line-height: 1.5;
 }
 
 .tech-list li strong {
-  color: #ddd;
+  color: var(--text-secondary);
 }
 
 .author-name {
-  color: #e0e0e0;
+  color: var(--text-secondary);
   font-size: 0.95rem;
   font-weight: 600;
   margin-bottom: 8px;
@@ -146,25 +146,25 @@
 }
 
 .github-link {
-  color: #6c63ff;
+  color: var(--accent);
   text-decoration: none;
   font-size: 0.9rem;
   transition: color 0.2s;
 }
 
 .github-link:hover {
-  color: #8b83ff;
+  color: var(--accent-light);
   text-decoration: underline;
 }
 
 .license-section {
   text-align: center;
   padding-top: 20px;
-  border-top: 1px solid #2a2a3e;
+  border-top: 1px solid var(--border-color);
 }
 
 .license-text {
-  color: #888;
+  color: var(--text-dim);
   font-size: 0.85rem;
 }
 </style>

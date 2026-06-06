@@ -618,6 +618,11 @@ async function refreshAllData() { await loadFolders(); await loadDuplicateShortc
             title="Mettre les éléments à la corbeille (Suppr)">
             <span class="btn-icon">&#x1F5D1;</span><span>Mettre à la corbeille...</span>
           </button>
+          <div class="action-separator"></div>
+          <button class="action-btn-full delete-btn" :disabled="actionInProgress || totalSelected === 0" @click="executeAction('delete')"
+            title="Supprimer définitivement les éléments sélectionnés (irreversible)">
+            <span class="btn-icon">&#x26A0;</span><span>Supprimer définitivement...</span>
+          </button>
         </div>
       </div>
     </div>
@@ -716,10 +721,7 @@ async function refreshAllData() { await loadFolders(); await loadDuplicateShortc
 .action-btn.small { padding: 6px 14px; font-size: 0.8rem; }
 
 /* Tabs */
-.tabs-bar { display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; padding: 10px 12px 6px; background: var(--bg-tertiary, #151528); border: 1px solid var(--border-color, #2a2a3e); border-radius: 12px 12px 0 0; border-bottom: none; scrollbar-width: thin; scrollbar-color: #2a2a3e transparent; }
-.tabs-bar::-webkit-scrollbar { height: 4px; }
-.tabs-bar::-webkit-scrollbar-track { background: transparent; }
-.tabs-bar::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 2px; }
+.tabs-bar { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 12px 6px; background: var(--bg-tertiary, #151528); border: 1px solid var(--border-color, #2a2a3e); border-radius: 12px 12px 0 0; border-bottom: none; }
 .tab-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-dim, #666); font-size: 0.82rem; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; flex: 0 0 auto; line-height: 1.3; }
 .tab-btn:hover { background: rgba(108,99,255,0.08); border-color: rgba(108,99,255,0.15); color: #aaa; }
 .tab-btn.active { background: rgba(108,99,255,0.15); border-color: rgba(108,99,255,0.3); color: #fff; }

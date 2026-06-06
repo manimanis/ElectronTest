@@ -6,6 +6,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
+const { formatSize } = require('../src/utils/format.js')
 
 let mainWindow = null
 let currentScanAbort = false
@@ -451,17 +452,6 @@ function analyzeFolder(dirPath, progressCb = null) {
 
   const stats = calculateStats(tree)
   return { tree, stats }
-}
-
-/**
- * Format file size to human-readable string
- */
-function formatSize(bytes) {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const k = 1024
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + units[i]
 }
 
 // IPC Handlers - securely expose filesystem operations to renderer
