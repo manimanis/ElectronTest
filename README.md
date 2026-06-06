@@ -1,285 +1,214 @@
-# 📂 Folder Analyzer
+# 📂 Folder Cleaner
 
-A **desktop application** built with **Vue.js 3** and **Electron** that allows you to select a local folder and analyze its contents in a structured tree view.
+Application desktop construite avec **Vue.js 3** et **Electron** pour nettoyer vos dossiers standard (Bureau, Documents, Téléchargements) et les dossiers `Bac###` détectés automatiquement sur les racines des lecteurs.
 
-![Technologies](https://img.shields.io/badge/Vue.js-3.4-4FC08D?logo=vue.js)
+![Technologies](https://img.shields.io/badge/Vue.js-3-4FC08D?logo=vue.js)
 ![Technologies](https://img.shields.io/badge/Electron-41-47848F?logo=electron)
 ![Technologies](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)
-![Technologies](https://img.shields.io/badge/electron--builder-26-2E8B57?logo=windows)
+![Technologies](https://img.shields.io/badge/7zip--bin-5-FF6600)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
 
-## ✨ Features
+## ✨ Fonctionnalités
 
-| Feature | Description |
-|---------|-------------|
-| **📁 Folder Selection** | Native OS dialog to pick any directory on your computer |
-| **🔍 Folder Analysis** | Recursive scanning of all files and subdirectories |
-| **🌳 Tree View** | Hierarchical display with expand/collapse (auto-expands first 2 levels) |
-| **📊 Summary Stats** | Total files, folders, and cumulative size |
-| **🔎 Filtering** | Search by filename and filter by file extension |
-| **🎨 File Type Icons** | 50+ contextual icons for code, media, documents, archives, etc. |
-| **🖼️ Application Icon** | Custom SVG icon with auto-generated ICO for Windows builds |
-| **🔒 Security** | `contextIsolation` enabled, `nodeIntegration` disabled, secure IPC bridge |
+### Interface utilisateur
+
+| Fonctionnalité | Description |
+|---------------|-------------|
+| **Tabulation par dossier** | Chaque dossier s'affiche dans un onglet avec compteur d'éléments et compteur de sélection |
+| **Mise en page Grid** | Panneau de sélection à gauche, panneau d'actions à droite (sticky) |
+| **Tri multi-colonnes** | Clic pour tri par un champ, Shift+clic pour ajouter un critère secondaire ou tertiaire |
+| **Tri toujours dossiers d'abord** | Les dossiers apparaissent avant les fichiers quel que soit le critère de tri |
+| **Sélection globale** | Sélectionner/sélectionner tout dans n'importe quel onglet |
+| **Confirmation avant suppression** | Dialogue de confirmation affichant le nombre de dossiers/fichiers sélectionnés |
+
+### Détecter et nettoyer
+
+| Fonctionnalité | Description |
+|---------------|-------------|
+| **Dossiers standard** | Bureau, Documents, Téléchargements toujours affichés |
+| **Dossiers Bac###** | Détection automatique sur toutes les racines des lecteurs (ex: `Bac2026`, `Bac2025`) |
+| **Raccourcis dupliqués** | Détection des raccourcis .lnk en double sur le Bureau |
+| **Exclusion .lnk** | Les fichiers raccourcis sont automatiquement exclus du nettoyage |
+
+### Actions
+
+| Action | Description |
+|--------|-------------|
+| **📦 Archiver en 7z** | Crée une archive 7zip au nom du dossier parent + horodatage ISO |
+| **📁 Déplacer** | Déplace les éléments sélectionnés vers un autre dossier |
+| **🗑️ Corbeille** | Envoie les éléments sélectionnés à la Corbeille (Windows) |
+| **🗑️ Vider la corbeille** | Affiche l'état de la Corbeille et permet de la vider |
+| **✕ Désélectionner tout** | Réinitialise toutes les sélections |
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Démarrage rapide
 
-### Prerequisites
+### Prérequis
 
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [npm](https://www.npmjs.com/) (v9 or higher)
+- [Node.js](https://nodejs.org/) (v18 ou supérieur)
+- [npm](https://www.npmjs.com/) (v9 ou supérieur)
 
 ### Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd folder-analyzer
-
-# Install dependencies
+git clone https://github.com/manimanis/ElectronTest.git
+cd ElectronTest
 npm install
 ```
 
-### Development
-
-Run the application in development mode with hot-reload:
+### Mode développement
 
 ```bash
 npm run dev
 ```
 
-This starts:
-1. **Vite dev server** for the Vue frontend (port 5173)
-2. **Electron main process** with the preload script
-3. **Hot Module Replacement** for instant UI updates
+Lance :
+1. **Vite dev server** pour le frontend Vue (port 5173)
+2. **Electron main process** avec le preload script
+3. **Hot Module Replacement** pour les mises à jour instantanées
 
-### Build for Production
-
-Build the Vue frontend and Electron files:
+### Build de production
 
 ```bash
 npm run build
 ```
 
-The `prebuild` script automatically generates the ICO icon from the SVG source.
+Le script `prebuild` génère automatiquement l'icône ICO depuis la source SVG.
 
-Output:
-- `dist/` — Built Vue frontend (HTML, CSS, JS)
-- `dist-electron/` — Built Electron main + preload scripts
-
-### Generate Executable (.exe)
-
-Package the app into a Windows portable executable using **electron-builder**:
+### Générer l'exécutable (.exe)
 
 ```bash
 npm run dist
 ```
 
-The `predist` script automatically generates the ICO icon before packaging.
-
-Output: `release/` folder containing:
-- `Folder Analyzer-1.0.0-portable.exe` — Standalone portable executable
-- `win-unpacked/` — Unpacked application directory
+Output dans `release/` :
+- `Folder Cleaner-1.0.0-portable.exe` — Exécutable portable autonome
 
 ---
 
-## ⚠️ Troubleshooting
-
-### Electron failed to install correctly
-
-**Error message:**
-```
-Error: Electron failed to install correctly, please delete node_modules/electron and try installing again
-```
-
-This happens when npm's `allowScripts` security feature blocks Electron's `postinstall` script from downloading the binary.
-
-**Quick fix (recommended):**
-
-1. Open `package.json` and ensure these entries exist in the `allowScripts` field:
-   ```json
-   "allowScripts": {
-     "electron@41.7.1": true,
-     "sharp@0.34.5": true,
-     "esbuild@0.25.12": true,
-     "electron-winstaller@5.4.0": true
-   }
-   ```
-
-2. Delete the corrupted Electron module and reinstall:
-   ```bash
-   rmdir /s /q node_modules\electron
-   npm install
-   ```
-
-**Manual fix (if the above doesn't work):**
-
-If `npm install` still doesn't download the binary, extract it manually:
-
-1. Delete the corrupted module:
-   ```bash
-   rmdir /s /q node_modules\electron
-   npm install
-   ```
-
-2. Trigger the download manually:
-   ```bash
-   node node_modules\electron\install.js
-   ```
-   
-3. If the `dist/` folder is still empty, find the cached zip and extract it:
-   ```bash
-   # Find the cached zip
-   dir %LOCALAPPDATA%\electron\Cache\ /s /b
-   
-   # Extract using PowerShell (use the path from the command above)
-   powershell Expand-Archive -Path "%LOCALAPPDATA%\electron\Cache\<hash>\electron-v41.7.1-win32-x64.zip" -DestinationPath "node_modules\electron\dist" -Force
-   
-   # Create path.txt
-   node -e "require('fs').writeFileSync('node_modules/electron/path.txt', 'electron.exe')"
-   ```
-
-4. Verify it works:
-   ```bash
-   npx electron --version
-   ```
-
----
-
-## 🏗️ Project Structure
+## 🏗️ Structure du projet
 
 ```
-folder-analyzer/
+ElectronTest/
 ├── electron/                  # Electron main process
-│   ├── main.js                # App window, IPC handlers, filesystem logic
+│   ├── main.js                # Fenêtre, handlers IPC, logique filesystem
 │   └── preload.js             # Secure bridge (contextBridge API)
 ├── src/                       # Vue 3 frontend
-│   ├── main.js                # Vue app entry point
-│   ├── App.vue                # Root component with state management
-│   └── components/
-│       ├── FolderSelector.vue # "Select Folder" button + path display
-│       ├── StatsSummary.vue   # File/folder count + total size cards
-│       ├── FilterBar.vue      # Search input + extension filter
-│       └── TreeView.vue       # Recursive tree node component
-├── build/                     # Application assets
-│   └── icon.svg               # Source SVG icon (256x256)
-├── scripts/                   # Build helper scripts
-│   ├── generate-icon.mjs      # SVG → ICO/PNG conversion (ESM)
-│   └── generate-icon.js       # Documentation script (CommonJS)
-├── index.html                 # Entry HTML file
-├── vite.config.js             # Vite + electron plugin configuration
-├── package.json               # Dependencies and scripts
-├── .gitignore                 # Git exclusion rules
-├── LICENSE.md                 # MIT License
-└── README.md                  # This file
+│   ├── main.js                # Point d'entrée Vue
+│   ├── App.vue                # Composant racine avec navigation
+│   ├── router/
+│   │   └── index.js           # Vue Router (CleanerView, AboutView)
+│   └── views/
+│       ├── CleanerView.vue    # Page principale de nettoyage
+│       └── AboutView.vue      # Page À propos
+├── build/                     # Assets de l'application
+│   └── icon.svg               # Icône SVG source
+├── scripts/                   # Scripts d'aide au build
+│   ├── generate-icon.mjs      # Conversion SVG → ICO/PNG (ESM)
+│   └── generate-icon.js       # Script documenté (CommonJS)
+├── index.html                 # HTML d'entrée
+├── vite.config.js             # Configuration Vite + electron plugin
+└── package.json               # Dépendances et scripts
 ```
 
 ---
 
-## 🔧 Technology Stack
+## 🔧 Stack technique
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | Vue.js 3.4 (Composition API, `<script setup>`) |
+| Couche | Technologie |
+|--------|------------|
+| **Frontend** | Vue.js 3 (Composition API, `<script setup>`) |
+| **Routing** | Vue Router 4 (Memory history pour Electron) |
 | **Build Tool** | Vite 6 |
-| **Desktop Shell** | Electron 41 |
-| **Packaging** | electron-builder 26 (portable target) |
+| **Shell Electron** | Electron 41 |
+| **Packaging** | electron-builder 26 (cible portable) |
 | **File System** | Node.js `fs` module (via main process) |
-| **Icon Processing** | Sharp + png-to-ico |
-| **Communication** | IPC + contextBridge (secure) |
+| **7zip** | 7zip-bin (7za.exe binaire inclus) |
+| **Icône** | Sharp + png-to-ico |
+| **Communication** | IPC + contextBridge (sécurisé) |
 
 ---
 
-## 🖼️ Application Icon
+## 🛡️ Architecture de sécurité
 
-The application includes a custom-designed icon with three formats:
-
-| Format | File | Size | Purpose |
-|--------|------|------|---------|
-| **SVG** | `build/icon.svg` | 1.9 KB | Source vector, window title bar, dev favicon |
-| **ICO** | `build/icon.ico` | 370 KB | Windows executable (16/32/48/64/128/256px) |
-| **PNG** | `build/icon-256.png` | 7.8 KB | Fallback for Linux/macOS |
-
-The icon is automatically generated before each build via the `prebuild` / `predist` scripts.
-
-### Icon Design
-
-- **Purple gradient circle** (#6c63ff → #4834d4) — matches the UI accent color
-- **Orange folder** with tab — represents directory scanning
-- **White document** with text lines — represents file analysis
-- **Magnifying glass overlay** — represents the search/inspection feature
+- **`contextIsolation: true`** — Le renderer ne peut pas accéder aux APIs Node.js ou Electron directement
+- **`nodeIntegration: false`** — Pas de globals Node.js dans le renderer
+- **Preload Script** — `contextBridge` expose uniquement les APIs spécifiques et sûres au renderer
+- Toutes les opérations filesystem se font exclusivement dans le **main process**
 
 ---
 
-## 🛡️ Security Architecture
+## 🎨 Fonctionnement du tri
 
-The application follows Electron security best practices:
+Le tri supporte jusqu'à 3 critères par dossier :
 
-- **`contextIsolation: true`** — The renderer process cannot access Node.js or Electron APIs directly
-- **`nodeIntegration: false`** — No Node.js globals in the renderer
-- **Preload Script** — Uses `contextBridge` to expose only specific safe APIs to the renderer:
-  - `selectFolder()` — Open native folder dialog
-  - `analyzeFolder(path)` — Scan folder contents
-  - `getFileInfo(path)` — Get single file details
+| Action | Résultat |
+|--------|----------|
+| **Clic** sur un bouton de tri | Trie par ce champ en ascendant |
+| **Clic** encore | Passe en descendant |
+| **Clic** encore | Réinitialise au tri par défaut (Nom ascendant) |
+| **Shift+clic** | Ajoute le champ comme critère secondaire |
+| **Shift+clic** sur un critère existant | Inverse son ordre |
 
-All filesystem operations happen exclusively in the **main process**, keeping the renderer secure.
+Les critères s'affichent avec un code couleur :
+- 🔵 **Primaire** (fond violet) — 1er critère
+- 🟣 **Secondaire** (fond violet foncé) — 2e critère
+- ⚫ **Tertiaire** (fond très sombre) — 3e critère
 
 ---
 
-## 📊 Data Flow
+## 📁 Nommage des archives 7z
 
+Lors de l'archivage, le fichier 7z est automatiquement nommé avec :
+- Le nom du dossier parent des éléments sélectionnés
+- La date et l'heure système au format ISO
+
+Exemple : `Desktop_2026-06-06T08-30-42.7z`
+
+---
+
+## ⚠️ Dépannage
+
+### Electron ne s'est pas installé correctement
+
+**Message d'erreur :**
 ```
-[User] → Clicks "Select Folder"
-         ↓
-[Vue Component] → window.electronAPI.selectFolder()
-                   ↓ (IPC invoke)
-[Preload Script] → contextBridge → ipcRenderer.invoke()
-                   ↓
-[Main Process] → dialog.showOpenDialog()
-                 ↓
-                 Returns folder path to renderer
-                 ↓
-[Vue Component] → window.electronAPI.analyzeFolder(path)
-                   ↓ (IPC invoke)
-[Main Process] → fs.readdirSync() + fs.statSync()
-                 ↓
-                 Returns { tree, stats }
-                 ↓
-[TreeView.vue] → Recursive rendering with expand/collapse
+Error: Electron failed to install correctly
 ```
 
+**Solution rapide :**
+
+Vérifiez que `package.json` contient :
+```json
+"allowScripts": {
+  "electron@41.7.1": true,
+  "sharp@0.34.5": true,
+  "esbuild@0.25.12": true,
+  "electron-winstaller@5.4.0": true
+}
+```
+
+Puis réinstallez :
+```bash
+rmdir /s /q node_modules\electron
+npm install
+```
+
+### Détecteur de Bac### introuvable
+
+Si aucun dossier `Bac###` n'apparaît, vérifiez que vous avez des dossiers comme `Bac2026`, `Bac2025` à la racine d'un lecteur (ex: `D:\Bac2026`). Les lettres de lecteur C–Z sont scannées automatiquement.
+
 ---
 
-## 🗂️ File Type Icons
+## 📝 Licence
 
-The app includes mapped icons for 50+ file extensions, grouped by category:
-
-| Category | Extensions |
-|----------|-----------|
-| **Code** | `.js` `.ts` `.vue` `.py` `.java` `.go` `.rs` `.cpp` |
-| **Web** | `.html` `.css` `.scss` `.jsx` `.tsx` |
-| **Media** | `.png` `.jpg` `.gif` `.svg` `.mp4` `.mp3` |
-| **Documents** | `.pdf` `.docx` `.xlsx` `.md` `.txt` |
-| **Archives** | `.zip` `.rar` `.7z` `.tar` `.gz` |
-| **Executables** | `.exe` `.msi` `.sh` `.bat` |
+Ce projet est sous licence **MIT** — voir le fichier [LICENSE.md](LICENSE.md) pour les détails.
 
 ---
 
-## 📝 License
+## 🤝 Contribuer
 
-This project is licensed under the **MIT License** — see the [LICENSE.md](LICENSE.md) file for details.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to open issues or submit pull requests.
-
-1. Fork the project
-2. Create your feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes: `git commit -m 'Add my feature'`
-4. Push to the branch: `git push origin feature/my-feature`
-5. Open a Pull Request
+Les contributions sont les bienvenues ! N'hésitez pas à ouvrir des issues ou soumettre des pull requests.
