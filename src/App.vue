@@ -1,7 +1,7 @@
 <script setup>
 /**
  * App.vue - Root component with navigation bar
- * Uses Vue Router for page transitions between Home and About
+ * Uses Vue Router for page transitions between Cleaner and About
  */
 import { useRouter } from 'vue-router'
 
@@ -19,18 +19,11 @@ function navigateTo(routeName) {
   <div class="app">
     <!-- Navigation bar -->
     <nav class="nav-bar">
-      <div class="nav-brand" @click="navigateTo('home')">
+      <div class="nav-brand">
         <span class="nav-icon">📂</span>
-        <span class="nav-title">Folder Analyzer</span>
+        <span class="nav-title">Folder Cleaner</span>
       </div>
       <div class="nav-links">
-        <button
-          class="nav-link"
-          :class="{ active: $route.name === 'home' }"
-          @click="navigateTo('home')"
-        >
-          🏠 Home
-        </button>
         <button
           class="nav-link"
           :class="{ active: $route.name === 'cleaner' }"

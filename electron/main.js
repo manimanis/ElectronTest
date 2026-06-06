@@ -281,14 +281,72 @@ ipcMain.handle('folder:openInExplorer', async (event, folderPath) => {
 })
 
 /**
+ * Get a list of logical drive root paths on Windows (e.g. C:\, D:\, etc.)
+ */
+function getDriveRoots() {
+  const drives = []
+  try {
+    const { execSync } = require('child_process')
+    const output = execSync('wmic logicaldisk get name', {
+      timeout: 5000,
+      windowsHide: true,
+      encoding: 'utf-8'
+    })
+    const lines = output.split('\n').map(l => l.trim()).filter(l => l && l !== 'Name')
+    for (const line of lines) {
+      const driveRoot = line.replace(/\\/g, '') + '\\'
+      if (fs.existsSync(driveRoot)) {
+        drives.push(driveRoot)
+      }
+    }
+  } catch (e) {
+    // Fallback: try common drive letters
+    for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('')) {
+      const driveRoot = letter + ':\\'
+      try {
+        if (fs.existsSync(driveRoot)) {
+          drives.push(driveRoot)
+        }
+      } catch (_) { /* skip inaccessible drives */ }
+    }
+  }
+  return drives
+}
+
+/**
+ * Find folders at the root of drives whose name matches "Bac" followed by digits (e.g. Bac2026, Bac2025)
+ */
+function findBacFolders() {
+  const bacFolders = []
+  const bacPattern = /^Bac\d+$/i
+  const drives = getDriveRoots()
+
+  for (const driveRoot of drives) {
+    try {
+      const entries = fs.readdirSync(driveRoot)
+      for (const entry of entries) {
+        const fullPath = path.join(driveRoot, entry)
+        try {
+          if (fs.statSync(fullPath).isDirectory() && bacPattern.test(entry)) {
+            bacFolders.push({ name: entry, path: fullPath })
+          }
+        } catch (_) { /* skip inaccessible */ }
+      }
+    } catch (_) { /* skip inaccessible drives */ }
+  }
+
+  return bacFolders
+}
+
+/**
  * Get the list of standard user folders to clean
+ * Includes: Desktop, Documents, Downloads, and any Bac### folders found on drive roots
  */
 function getStandardFolders() {
   const homeDir = os.homedir()
   const desktop = path.join(homeDir, 'Desktop')
   const documents = path.join(homeDir, 'Documents')
   const downloads = path.join(homeDir, 'Downloads')
-  const bac2026 = path.join(desktop, 'Bac2026')
 
   const folders = [
     { name: 'Desktop', path: desktop },
@@ -296,9 +354,13 @@ function getStandardFolders() {
     { name: 'Downloads', path: downloads }
   ]
 
-  // Only add Bac2026 if it exists
-  if (fs.existsSync(bac2026)) {
-    folders.push({ name: 'Bac2026', path: bac2026 })
+  // Find Bac### folders on drive roots (e.g. Bac2026, Bac2025)
+  const bacFolders = findBacFolders()
+  for (const bf of bacFolders) {
+    // Avoid duplicates
+    if (!folders.some(f => f.path === bf.path)) {
+      folders.push(bf)
+    }
   }
 
   return folders
@@ -390,6 +452,32 @@ function findDuplicateShortcuts(desktopPath) {
 }
 
 /**
+ * Calculate total size of a directory recursively
+ */
+function getDirectorySize(dirPath) {
+  let totalSize = 0
+  try {
+    const entries = fs.readdirSync(dirPath)
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry)
+      try {
+        const stats = fs.statSync(fullPath)
+        if (stats.isDirectory()) {
+          totalSize += getDirectorySize(fullPath)
+        } else {
+          totalSize += stats.size
+        }
+      } catch (e) {
+        // Skip inaccessible items
+      }
+    }
+  } catch (e) {
+    // Skip inaccessible directories
+  }
+  return totalSize
+}
+
+/**
  * Scan a folder and return non-shortcut files (with their sizes)
  */
 function scanFolderForCleaning(folderPath) {
@@ -403,11 +491,17 @@ function scanFolderForCleaning(folderPath) {
         // Skip shortcuts (.lnk files) as per requirements
         if (isShortcutOrSymlink(fullPath)) continue
 
+        let size = stats.size
+        if (stats.isDirectory()) {
+          // Calculate total size of directory contents
+          size = getDirectorySize(fullPath)
+        }
+
         items.push({
           name: entry,
           path: fullPath,
-          size: stats.size,
-          formattedSize: formatSize(stats.size),
+          size: size,
+          formattedSize: formatSize(size),
           modifiedAt: stats.mtime.toISOString(),
           isDirectory: stats.isDirectory()
         })
@@ -562,6 +656,91 @@ ipcMain.handle('cleaner:selectDestinationFolder', async () => {
     return null
   }
   return result.filePaths[0]
+})
+
+/**
+ * Build an archive filename from the parent folder of the first item + current date/time ISO
+ * Example: if item is C:\Users\Me\Desktop\file.txt → Desktop_2026-06-06T08-30-00.7z
+ */
+function buildArchiveName(items) {
+  // Get the parent folder name of the first item
+  let parentName = 'archive'
+  if (items.length > 0) {
+    const parentDir = path.dirname(items[0])
+    parentName = path.basename(parentDir)
+  }
+
+  // ISO-like date/time without colons (safe for filenames)
+  const now = new Date()
+  const pad = (n) => n.toString().padStart(2, '0')
+  const dateStr =
+    now.getFullYear() + '-' +
+    pad(now.getMonth() + 1) + '-' +
+    pad(now.getDate()) + 'T' +
+    pad(now.getHours()) + '-' +
+    pad(now.getMinutes()) + '-' +
+    pad(now.getSeconds())
+
+  return `${parentName}_${dateStr}.7z`
+}
+
+/**
+ * Archive selected items to a 7z file using 7za
+ * items: array of file/folder paths to archive
+ * destDir: optional destination directory — if provided, saves directly there without dialog;
+ *          if omitted, shows a native save dialog
+ * Returns: { success, archivePath, error, canceled }
+ */
+ipcMain.handle('cleaner:archiveTo7z', async (event, items, destDir) => {
+  const { execSync } = require('child_process')
+
+  let archivePath
+
+  if (destDir) {
+    // Save directly in the given directory with an auto-generated name
+    const fileName = buildArchiveName(items)
+    archivePath = path.join(destDir, fileName)
+    // Avoid overwriting: append (1), (2), etc.
+    let counter = 1
+    while (fs.existsSync(archivePath)) {
+      const ext = path.extname(fileName)
+      const base = path.basename(fileName, ext)
+      archivePath = path.join(destDir, `${base}_(${counter})${ext}`)
+      counter++
+    }
+  } else {
+    // Show save dialog (first time)
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Enregistrer l\'archive 7z',
+      defaultPath: path.join(os.homedir(), 'Downloads', 'archive.7z'),
+      filters: [{ name: '7z Archive', extensions: ['7z'] }]
+    })
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, canceled: true }
+    }
+
+    archivePath = result.filePath
+  }
+
+  try {
+    const sevenZip = require('7zip-bin')
+    const sevenZipPath = sevenZip.path7za
+
+    // Build the argument list: 7za a -y archive.7z "item1" "item2" ...
+    const args = ['a', '-y', archivePath, ...items]
+
+    execSync(`"${sevenZipPath}" ${args.map(a => `"${a}"`).join(' ')}`, {
+      timeout: 300000, // 5 minutes max
+      windowsHide: true,
+      encoding: 'utf-8'
+    })
+
+    return { success: true, archivePath }
+  } catch (err) {
+    console.error('7z archiving failed:', err.message)
+    return { success: false, error: err.message }
+  }
 })
 
 /**

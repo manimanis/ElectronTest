@@ -1,7 +1,7 @@
 {
-  "name": "folder-analyzer",
+  "name": "folder-cleaner",
   "version": "1.0.0",
-  "description": "Desktop application to analyze and display folder contents",
+  "description": "Desktop application to clean folder contents",
   "author": "Mohamed Anis MANI",
   "main": "electron/main.js",
   "scripts": {
@@ -13,6 +13,7 @@
     "dist": "vite build && electron-builder"
   },
   "dependencies": {
+    "7zip-bin": "^5.2.0",
     "vue": "^3.5.35",
     "vue-router": "^4.6.4"
   },

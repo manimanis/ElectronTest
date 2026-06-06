@@ -7,35 +7,33 @@
 <template>
   <div class="about-view">
     <div class="about-card">
-      <h1 class="about-title">📂 Folder Analyzer</h1>
+      <h1 class="about-title">📂 Folder Cleaner</h1>
       <p class="about-version">Version 1.0.0</p>
-      <p class="about-description">
-        A desktop application built with Vue.js 3 and Electron that allows you to
-        select a local folder and analyze its contents in a structured tree view.
-      </p>
+      <p class="about-description">Une application de bureau construite avec Vue.js 3 et Electron qui permet de
+        sélectionner un dossier local et d’analyser son contenu dans une vue arborescente structurée.</p>
 
       <div class="tech-section">
-        <h2>🔧 Technology Stack</h2>
+        <h2>🔧 Technologies Utilisées</h2>
         <ul class="tech-list">
-          <li><strong>Frontend:</strong> Vue.js 3.5 (Composition API)</li>
-          <li><strong>Build:</strong> Vite 6</li>
-          <li><strong>Desktop:</strong> Electron 41</li>
-          <li><strong>Packaging:</strong> electron-builder 26</li>
-          <li><strong>Router:</strong> Vue Router 4</li>
+          <li><strong>Frontend :</strong> Vue.js 3.5 (Composition API)</li>
+          <li><strong>Build :</strong> Vite 6</li>
+          <li><strong>Application bureau :</strong> Electron 41</li>
+          <li><strong>Packaging :</strong> electron-builder 26</li>
+          <li><strong>Router :</strong> Vue Router 4</li>
         </ul>
       </div>
 
       <div class="features-section">
-        <h2>✨ Features</h2>
+        <h2>✨ Fonctionnalités</h2>
         <ul class="features-list">
-          <li>📁 Native folder selection dialog</li>
-          <li>🔍 Recursive folder analysis</li>
-          <li>🌳 Hierarchical tree view with expand/collapse</li>
-          <li>📊 Summary statistics (files, folders, size)</li>
-          <li>🔎 Search by filename and extension filter</li>
-          <li>🎨 50+ file type icons</li>
-          <li>⚡ Async scanning with cancel for large folders</li>
-          <li>🔒 Secure IPC with contextIsolation</li>
+          <li>📁 Sélection native de dossiers</li>
+          <li>🔍 Analyse récursive des dossiers</li>
+          <li>🌳 Vue arborescente avec expansion/contraction</li>
+          <li>📊 Statistiques récapitulatives (fichiers, dossiers, taille)</li>
+          <li>🔎 Recherche par nom de fichier et filtre par extension</li>
+          <li>🎨 50+ icônes de types de fichiers</li>
+          <li>⚡ Analyse asynchrone avec annulation pour dossiers volumineux</li>
+          <li>🔒 IPC sécurisé avec contextIsolation</li>
         </ul>
       </div>
 

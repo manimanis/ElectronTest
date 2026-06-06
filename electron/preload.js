@@ -67,5 +67,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isRecycleBinEmpty: () => ipcRenderer.invoke('cleaner:isRecycleBinEmpty'),
 
   // Empty the entire Windows Recycle Bin
-  emptyRecycleBin: () => ipcRenderer.invoke('cleaner:emptyRecycleBin')
+  emptyRecycleBin: () => ipcRenderer.invoke('cleaner:emptyRecycleBin'),
+
+  // Archive selected items to a 7z file
+  // If destDir is provided, saves directly there without a dialog
+  archiveTo7z: (items, destDir) => ipcRenderer.invoke('cleaner:archiveTo7z', items, destDir)
 })
