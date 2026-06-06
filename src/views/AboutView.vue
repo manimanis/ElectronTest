@@ -10,7 +10,7 @@
       <h1 class="about-title">📂 Folder Cleaner</h1>
       <p class="about-version">Version 1.0.0</p>
       <p class="about-description">Une application de bureau construite avec Vue.js 3 et Electron qui permet de
-        sélectionner un dossier local et d’analyser son contenu dans une vue arborescente structurée.</p>
+        nettoyer, organiser et archiver le contenu de vos dossiers système (Bureau, Documents, Téléchargements…).</p>
 
       <div class="tech-section">
         <h2>🔧 Technologies Utilisées</h2>
@@ -20,26 +20,41 @@
           <li><strong>Application bureau :</strong> Electron 41</li>
           <li><strong>Packaging :</strong> electron-builder 26</li>
           <li><strong>Router :</strong> Vue Router 4</li>
+          <li><strong>Compression :</strong> 7zip-bin</li>
+          <li><strong>Image :</strong> Sharp</li>
         </ul>
       </div>
 
       <div class="features-section">
         <h2>✨ Fonctionnalités</h2>
         <ul class="features-list">
-          <li>📁 Sélection native de dossiers</li>
-          <li>🔍 Analyse récursive des dossiers</li>
-          <li>🌳 Vue arborescente avec expansion/contraction</li>
-          <li>📊 Statistiques récapitulatives (fichiers, dossiers, taille)</li>
-          <li>🔎 Recherche par nom de fichier et filtre par extension</li>
-          <li>🎨 50+ icônes de types de fichiers</li>
-          <li>⚡ Analyse asynchrone avec annulation pour dossiers volumineux</li>
+          <li>🧹 Nettoyage des dossiers système (Bureau, Documents, Téléchargements…)</li>
+          <li>🗑️ Suppression vers la corbeille, suppression définitive ou déplacement</li>
+          <li>📑 Affichage en onglets — un onglet par dossier configuré</li>
+          <li>🔀 Tri multi-colonnes (nom, taille, type) avec Shift+clic pour combiner les critères</li>
+          <li>🔗 Détection et suppression des raccourcis en double</li>
+          <li>📦 Archivage 7z des éléments sélectionnés</li>
+          <li>🧹 Gestion de la corbeille Windows (statut, vidage)</li>
+          <li>⚙️ Configuration personnalisable des dossiers avec patterns regex</li>
+          <li>🚫 Les raccourcis (.lnk) sont exclus automatiquement du nettoyage</li>
           <li>🔒 IPC sécurisé avec contextIsolation</li>
+          <li>🔔 Système de notifications toast</li>
         </ul>
+      </div>
+
+      <div class="author-section">
+        <h2>👤 Auteur</h2>
+        <p class="author-name">Mohamed Anis MANI</p>
+        <p class="author-links">
+          <a href="https://github.com/manimanis/ElectronTest" target="_blank" rel="noopener" class="github-link">
+            💻 GitHub
+          </a>
+        </p>
       </div>
 
       <div class="license-section">
         <p class="license-text">
-          This project is licensed under the <strong>MIT License</strong>.
+          Ce projet est distribué sous la licence <strong>MIT License</strong>.
         </p>
       </div>
     </div>
@@ -85,12 +100,14 @@
 }
 
 .tech-section,
-.features-section {
+.features-section,
+.author-section {
   margin-bottom: 24px;
 }
 
 .tech-section h2,
-.features-section h2 {
+.features-section h2,
+.author-section h2 {
   font-size: 1.1rem;
   color: #e0e0e0;
   margin-bottom: 12px;
@@ -114,6 +131,30 @@
 
 .tech-list li strong {
   color: #ddd;
+}
+
+.author-name {
+  color: #e0e0e0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.author-links {
+  display: flex;
+  gap: 16px;
+}
+
+.github-link {
+  color: #6c63ff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color 0.2s;
+}
+
+.github-link:hover {
+  color: #8b83ff;
+  text-decoration: underline;
 }
 
 .license-section {

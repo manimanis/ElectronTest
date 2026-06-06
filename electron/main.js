@@ -665,15 +665,6 @@ function getStandardFolders() {
     { name: 'Downloads', path: downloads }
   ]
 
-  // Find Bac### folders on drive roots (e.g. Bac2026, Bac2025)
-  const bacFolders = findBacFolders()
-  for (const bf of bacFolders) {
-    // Avoid duplicates
-    if (!folders.some(f => f.path === bf.path)) {
-      folders.push(bf)
-    }
-  }
-
   return folders
 }
 
@@ -803,16 +794,17 @@ function scanFolderForCleaning(folderPath) {
         const stats = fs.statSync(fullPath)
         // Skip shortcuts (.lnk files) as per requirements
         if (isShortcutOrSymlink(fullPath)) continue
-        // Only include directories, not individual files
-        if (!stats.isDirectory()) continue
 
+        const isDir = stats.isDirectory()
+        // For directories, compute size recursively; for files, use direct size
+        const itemSize = isDir ? getDirectorySize(fullPath) : stats.size
         items.push({
           name: entry,
           path: fullPath,
-          size: getDirectorySize(fullPath),
-          formattedSize: formatSize(getDirectorySize(fullPath)),
+          size: itemSize,
+          formattedSize: formatSize(itemSize),
           modifiedAt: stats.mtime.toISOString(),
-          isDirectory: true
+          isDirectory: isDir
         })
       } catch (e) {
         // Skip inaccessible items
@@ -1271,6 +1263,55 @@ ipcMain.handle('config:getDefaults', async () => {
  * Returns { valid, resolved, error }
  * resolved is always an array of paths (or empty array)
  */
+/**
+ * Find duplicate files across configured folders.
+ * Groups files by name (case-insensitive). Files with the same name in different locations are duplicates.
+ */
+function findDuplicateFiles() {
+  const folders = getConfiguredFolders()
+  const filesByName = {} // name.toLowerCase() → [{ name, path, size, formattedSize, folder, modifiedAt }]
+
+  for (const folder of folders) {
+    if (!fs.existsSync(folder.path)) continue
+    try {
+      const entries = fs.readdirSync(folder.path)
+      for (const entry of entries) {
+        const fullPath = path.join(folder.path, entry)
+        try {
+          const stats = fs.statSync(fullPath)
+          if (stats.isDirectory()) continue
+          if (isShortcutOrSymlink(fullPath)) continue
+
+          const key = entry.toLowerCase()
+          if (!filesByName[key]) filesByName[key] = []
+          filesByName[key].push({
+            name: entry,
+            path: fullPath,
+            size: stats.size,
+            formattedSize: formatSize(stats.size),
+            folder: folder.name,
+            modifiedAt: stats.mtime.toISOString()
+          })
+        } catch (_) { /* skip inaccessible */ }
+      }
+    } catch (_) { /* skip inaccessible folder */ }
+  }
+
+  // Filter: only keep groups with more than 1 file (duplicates)
+  const duplicates = []
+  for (const [, files] of Object.entries(filesByName)) {
+    if (files.length > 1) {
+      duplicates.push({ name: files[0].name, files })
+    }
+  }
+  duplicates.sort((a, b) => a.name.localeCompare(b.name))
+  return duplicates
+}
+
+ipcMain.handle('cleaner:findDuplicateFiles', async () => {
+  return findDuplicateFiles()
+})
+
 ipcMain.handle('config:validatePath', async (event, entry) => {
   try {
     // Sanitize input

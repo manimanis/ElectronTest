@@ -11,7 +11,7 @@
  *   - success: both banner and toast disappear after a timeout
  *   - error: toast disappears but error banner stays
  */
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 
 const config = ref({ folders: [] })
 const loading = ref(true)
@@ -20,13 +20,16 @@ const errorMessage = ref('')
 const toast = ref('')
 const toastType = ref('') // 'success' or 'error'
 const expandedIndex = ref(-1)
+// #23: Live path validation state per folder index
+const pathValidations = ref({})
+let validationTimer = null
 
 // Example patterns for reference
 const examplePatterns = [
   { label: 'Tous les utilisateurs - Bureau', pattern: 'C:\\Users\\*\\Desktop' },
   { label: 'Tous les utilisateurs - Documents', pattern: 'C:\\Users\\*\\Documents' },
   { label: 'Tous les utilisateurs - Downloads', pattern: 'C:\\Users\\*\\Downloads' },
-  { label: 'Dossier Bac sur toutes les drives', pattern: '*:\\Bac*' },
+  { label: 'Dossier Bac sur toutes les partitions', pattern: '*:\\Bac*' },
   { label: 'Dossier spécifique', pattern: 'C:\\Users\\MonNom\\Desktop' }
 ]
 
@@ -146,6 +149,29 @@ function applyExample(pattern) {
     enabled: true
   })
   expandedIndex.value = config.value.folders.length - 1
+}
+
+// #23: Live path validation with debounce
+function validatePathDebounced(index) {
+  clearTimeout(validationTimer)
+  const entry = config.value.folders[index]
+  if (!entry || !entry.path) {
+    pathValidations.value[index] = null
+    return
+  }
+  pathValidations.value[index] = { checking: true }
+  validationTimer = setTimeout(async () => {
+    try {
+      const result = await window.electronAPI.validateFolderPath(JSON.stringify(entry))
+      pathValidations.value[index] = result
+    } catch (err) {
+      pathValidations.value[index] = { valid: false, error: err.message }
+    }
+  }, 400)
+}
+
+function getPathValidation(index) {
+  return pathValidations.value[index] || null
 }
 </script>
 
@@ -268,12 +294,28 @@ function applyExample(pattern) {
               <input
                 type="text"
                 class="form-input mono"
+                :class="{ 'path-valid': getPathValidation(index)?.valid === true, 'path-invalid': getPathValidation(index)?.valid === false }"
                 v-model="folder.path"
                 placeholder="Ex: C:\Users\*\Desktop ou C:\Users\MonNom\Desktop"
+                @input="validatePathDebounced(index)"
               />
               <button class="icon-btn browse-btn" @click="selectFolderPath(index)" title="Parcourir...">
                 📁
               </button>
+            </div>
+            <!-- #23: Live validation indicator -->
+            <div v-if="getPathValidation(index)" class="path-validation" :class="{ valid: getPathValidation(index).valid, error: !getPathValidation(index).valid && !getPathValidation(index).checking }">
+              <template v-if="getPathValidation(index).checking">
+                <span class="val-icon spin">⏳</span> Vérification...
+              </template>
+              <template v-else-if="getPathValidation(index).valid">
+                <span class="val-icon">✅</span>
+                <span v-if="getPathValidation(index).resolved" class="val-detail">{{ getPathValidation(index).resolved.length }} dossier(s) trouvé(s)</span>
+              </template>
+              <template v-else>
+                <span class="val-icon">❌</span>
+                <span class="val-detail">{{ getPathValidation(index).error || 'Chemin introuvable' }}</span>
+              </template>
             </div>
           </div>
 
@@ -776,6 +818,43 @@ function applyExample(pattern) {
 
 .input-with-button .form-input {
   flex: 1;
+}
+
+/* #23: Path validation indicator */
+.path-validation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.path-validation.valid {
+  color: #6fcf97;
+  background: rgba(39, 174, 96, 0.08);
+}
+
+.path-validation.error {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.path-validation.checking {
+  color: #888;
+}
+
+.val-icon { flex-shrink: 0; }
+.val-detail { color: inherit; opacity: 0.8; }
+.val-icon.spin { animation: spin 1s linear infinite; display: inline-block; }
+
+.path-valid {
+  border-color: #27ae60 !important;
+}
+
+.path-invalid {
+  border-color: #e74c3c !important;
 }
 
 .checkbox-group {

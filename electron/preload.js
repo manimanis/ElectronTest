@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Find duplicate shortcuts on the Desktop
   findDuplicateShortcuts: () => ipcRenderer.invoke('cleaner:findDuplicateShortcuts'),
 
+  // Find duplicate files across configured folders (same name)
+  findDuplicateFiles: () => ipcRenderer.invoke('cleaner:findDuplicateFiles'),
+
   // Delete specific duplicate shortcuts
   deleteShortcuts: (shortcutPaths) => ipcRenderer.invoke('cleaner:deleteShortcuts', shortcutPaths),
 
