@@ -6,9 +6,14 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
+const sevenZip = require('7zip-bin')
 
 let mainWindow = null
 let currentScanAbort = false
+
+console.log = (...args) => {
+  mainWindow.webContents.send('main-log', args.join(' '));
+};
 
 /**
  * Format file size to human-readable string
@@ -157,7 +162,7 @@ function resolvePathPatternInternal(pattern) {
       if (fs.existsSync(normPattern)) {
         return [path.normalize(normPattern)]
       }
-    } catch (_) {}
+    } catch (_) { }
     return []
   }
 
@@ -350,7 +355,8 @@ function createWindow() {
     icon: iconPath,
     webPreferences: {
       contextIsolation: true,    // Security: isolate renderer process
-      nodeIntegration: false,    // Security: disable Node.js in renderer
+      // TODO: doit être false
+      nodeIntegration: true,    // Security: disable Node.js in renderer
       preload: path.join(__dirname, 'preload.js') // Secure bridge
     }
   })
@@ -985,6 +991,16 @@ function buildArchiveName(items) {
   return `${parentName}_${dateStr}.7z`
 }
 
+function getSevenZipPath() {
+  let sevenZipPath = sevenZip.path7za
+
+  sevenZipPath = sevenZipPath.replace(`app.asar`, `app.asar.unpacked`)
+
+  // console.log(sevenZipPath)
+
+  return sevenZipPath
+}
+
 /**
  * Archive selected items to a 7z file using 7za
  * items: array of file/folder paths to archive
@@ -1024,18 +1040,17 @@ ipcMain.handle('cleaner:archiveTo7z', async (event, items, destDir) => {
     archivePath = result.filePath
   }
 
+  let sevenZipPath = getSevenZipPath()
+  if (!sevenZipPath) {
+    return { success: false, error: "Erreur : 7zip introuvable dans " + sevenZip.path7za }
+  }
   try {
-    const sevenZip = require('7zip-bin')
-    let sevenZipPath = sevenZip.path7za
-
     // Build the argument list: 7za a -y archive.7z "item1" "item2" ...
     const args = ['a', '-y', archivePath, ...items]
 
-    sevenZipPath = sevenZipPath.replace("app.asar", "app.asar.unpacked")
-
     execSync(`"${sevenZipPath}" ${args.map(a => `"${a}"`).join(' ')}`, {
       timeout: 300000, // 5 minutes max
-      windowsHide: true,
+      windowsHide: false,
       encoding: 'utf-8'
     })
 
@@ -1120,7 +1135,7 @@ async function emptyRecycleBin() {
   const { execSync } = require('child_process')
 
   function powerShellEmpty() {
-    let success = false, 
+    let success = false,
       error = ''
     try {
       execSync(

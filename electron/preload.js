@@ -5,6 +5,10 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 // Expose a safe 'electronAPI' object to the renderer (Vue app)
 contextBridge.exposeInMainWorld('electronAPI', {
+  onMainLog: (callback) => {
+    ipcRenderer.on('main-log', (_, message) => callback(message));
+  },
+  
   // Open native folder selection dialog
   selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
 
@@ -82,7 +86,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadFolderConfig: () => ipcRenderer.invoke('config:load'),
 
   // Save folder configuration
-  saveFolderConfig: (config) => ipcRenderer.invoke('config:save', JSON.parse(config) || { folders: []}),
+  saveFolderConfig: (config) => ipcRenderer.invoke('config:save', JSON.parse(config) || { folders: [] }),
 
   // Get default configuration
   getDefaultFolderConfig: () => ipcRenderer.invoke('config:getDefaults'),
