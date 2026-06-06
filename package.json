@@ -51,6 +51,7 @@
       "forceCodeSigning": false,
       "signAndEditExecutable": false
     },
+    "asarUnpack": ["node_modules/7zip-bin/**/*"],
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true

@@ -1026,10 +1026,12 @@ ipcMain.handle('cleaner:archiveTo7z', async (event, items, destDir) => {
 
   try {
     const sevenZip = require('7zip-bin')
-    const sevenZipPath = sevenZip.path7za
+    let sevenZipPath = sevenZip.path7za
 
     // Build the argument list: 7za a -y archive.7z "item1" "item2" ...
     const args = ['a', '-y', archivePath, ...items]
+
+    sevenZipPath = sevenZipPath.replace("app.asar", "app.asar.unpacked")
 
     execSync(`"${sevenZipPath}" ${args.map(a => `"${a}"`).join(' ')}`, {
       timeout: 300000, // 5 minutes max
