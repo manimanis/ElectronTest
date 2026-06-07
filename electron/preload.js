@@ -1,7 +1,7 @@
 // Preload script - Secure bridge between main and renderer processes
 // Uses contextBridge to expose safe APIs, NOT nodeIntegration
 
-const { contextBridge, ipcRenderer } = require('electron')
+import { contextBridge, ipcRenderer } from 'electron'
 
 // Expose a safe 'electronAPI' object to the renderer (Vue app)
 contextBridge.exposeInMainWorld('electronAPI', {

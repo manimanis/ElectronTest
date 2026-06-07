@@ -2,12 +2,17 @@
 // Handles filesystem access and IPC communication with the renderer
 // Supports async scanning with progress and cancellation for large folders
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
-const path = require('path')
-const fs = require('fs')
-const os = require('os')
-const sevenZip = require('7zip-bin')
-const { execSync } = require('child_process')
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import path from 'path'
+import fs from 'fs'
+import { promises as fsp } from 'fs'
+import os from 'os'
+import { fileURLToPath } from 'url'
+import sevenZip from '7zip-bin'
+import { execSync } from 'child_process'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 let mainWindow = null
 let currentScanAbort = false
@@ -350,7 +355,8 @@ function getConfiguredFolders() {
  */
 function createWindow() {
   // Icon path for the application window
-  const iconPath = path.join(__dirname, '..', 'build', 'icon.svg')
+  // Use .ico for Windows titlebar (SVG not supported by Electron on Windows)
+  const iconPath = path.join(__dirname, '..', 'build', 'icon.ico')
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -722,17 +728,37 @@ function findDuplicateShortcuts(desktopPath) {
 
 /**
  * Calculate total size of a directory recursively
+ * Async version — non-blocking, supports cancellation and depth/cycle protection
+ *
+ * @param {string} dirPath - Path to scan
+ * @param {number} [maxDepth=50] - Maximum recursion depth
+ * @param {Set<string>} [visited=new Set()] - Set of visited paths (cycle detection)
+ * @returns {Promise<number>} Total size in bytes
  */
-function getDirectorySize(dirPath) {
+async function getDirectorySize(dirPath, maxDepth = 50, visited = new Set()) {
+  // Cycle detection: check if we've already visited this path
+  const resolvedPath = path.resolve(dirPath)
+  if (visited.has(resolvedPath)) {
+    console.warn(`Cycle detected: ${dirPath} — already visited, skipping`)
+    return 0
+  }
+  visited.add(resolvedPath)
+
+  // Depth limit
+  if (maxDepth <= 0) {
+    console.warn(`Max depth reached: ${dirPath} — truncating`)
+    return 0
+  }
+
   let totalSize = 0
   try {
-    const entries = fs.readdirSync(dirPath)
+    const entries = await fsp.readdir(dirPath)
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry)
       try {
-        const stats = fs.statSync(fullPath)
+        const stats = await fsp.stat(fullPath)
         if (stats.isDirectory()) {
-          totalSize += getDirectorySize(fullPath)
+          totalSize += await getDirectorySize(fullPath, maxDepth - 1, visited)
         } else {
           totalSize += stats.size
         }
@@ -741,30 +767,33 @@ function getDirectorySize(dirPath) {
       }
     }
   } catch (e) {
-    // Skip inaccessible directories
+    // Skip inaccessible directories (e.g. permissions)
+    console.warn(`Cannot read ${dirPath}: ${e.message}`)
   }
+
   return totalSize
 }
 
 /**
- * Scan a folder and return subdirectories only (no files).
+ * Scan a folder and return items for cleaning (async, non-blocking).
  * Only directories are included — individual files are excluded from cleaning.
  * Skips shortcuts (.lnk files) from cleaning operations.
+ * Has depth/cycle protection via getDirectorySize.
  */
-function scanFolderForCleaning(folderPath) {
+async function scanFolderForCleaning(folderPath) {
   const items = []
   try {
-    const entries = fs.readdirSync(folderPath)
+    const entries = await fsp.readdir(folderPath)
     for (const entry of entries) {
       const fullPath = path.join(folderPath, entry)
       try {
-        const stats = fs.statSync(fullPath)
+        const stats = await fsp.stat(fullPath)
         // Skip shortcuts (.lnk files) as per requirements
         if (isShortcutOrSymlink(fullPath)) continue
 
         const isDir = stats.isDirectory()
         // For directories, compute size recursively; for files, use direct size
-        const itemSize = isDir ? getDirectorySize(fullPath) : stats.size
+        const itemSize = isDir ? await getDirectorySize(fullPath) : stats.size
         items.push({
           name: entry,
           path: fullPath,
@@ -857,11 +886,12 @@ function moveToFolder(filePath, targetDir) {
  */
 ipcMain.handle('cleaner:getStandardFolders', async () => {
   const folders = getConfiguredFolders()
-  return folders.map(f => ({
+  const itemsPromises = folders.map(async (f) => ({
     ...f,
     exists: fs.existsSync(f.path),
-    items: fs.existsSync(f.path) ? scanFolderForCleaning(f.path) : []
+    items: fs.existsSync(f.path) ? await scanFolderForCleaning(f.path) : []
   }))
+  return Promise.all(itemsPromises)
 })
 
 /**
@@ -871,7 +901,7 @@ ipcMain.handle('cleaner:scanFolder', async (event, folderPath) => {
   if (!fs.existsSync(folderPath)) {
     throw new Error(`Folder does not exist: ${folderPath}`)
   }
-  return scanFolderForCleaning(folderPath)
+  return await scanFolderForCleaning(folderPath)
 })
 
 /**

@@ -2,13 +2,14 @@
 /**
  * AboutView.vue - Application information page
  */
+const appVersion = __APP_VERSION__
 </script>
 
 <template>
   <div class="about-view">
     <div class="about-card">
       <h1 class="about-title">📂 Folder Cleaner</h1>
-      <p class="about-version">Version 1.0.0</p>
+      <p class="about-version">Version {{ appVersion }}</p>
       <p class="about-description">Une application de bureau construite avec Vue.js 3 et Electron qui permet de
         nettoyer, organiser et archiver le contenu de vos dossiers système (Bureau, Documents, Téléchargements…).</p>
 

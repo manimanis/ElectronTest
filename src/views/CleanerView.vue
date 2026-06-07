@@ -11,6 +11,7 @@ import ActionPanel from '../components/ActionPanel.vue'
 import ShortcutSection from '../components/ShortcutSection.vue'
 import RecycleBinBar from '../components/RecycleBinBar.vue'
 import ContextMenu from '../components/ContextMenu.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 // ===== State =====
 const folders = ref([])
@@ -37,6 +38,23 @@ const sessionStats = ref({ itemsCleaned: 0, spaceFreed: 0, operationCount: 0 })
 const contextMenu = ref({ visible: false, x: 0, y: 0, item: null })
 const deleteConfirmStep = ref(0)
 const deleteConfirmText = ref('')
+const recycleBinConfirmDialog = ref(null)
+const deleteConfirmDialog = ref(null)
+
+// ConfirmDialog states
+const trashConfirm = ref({ visible: false, message: '' })
+const shortcutConfirm = ref({ visible: false, message: '' })
+const recycleBinConfirm = ref({ visible: false, message: '', challenge: null })
+const deleteConfirm = ref({ visible: false, message: '', challenge: null })
+let pendingTrashAction = null
+let pendingShortcutAction = null
+let pendingRecycleBinAction = null
+let pendingDeleteAction = null
+
+const CHALLENGE_WORDS = ['SUPPRIMER', 'CONFIRMER', 'DÉTRUIRE', 'EFFACER', 'DANGER', 'IRRÉVERSIBLE']
+function randomWord() {
+  return CHALLENGE_WORDS[Math.floor(Math.random() * CHALLENGE_WORDS.length)]
+}
 
 // ===== Computed =====
 const totalSelected = computed(() => {
@@ -251,7 +269,11 @@ async function doExecuteAction(action) {
     moveDestination.value = dest
   }
 
-  const labels = { trash: 'Mise à la corbeille', delete: 'Suppression définitive', moveToFolder: 'Déplacement' }
+  const labels = { 
+    trash: 'Mise à la corbeille', 
+    delete: 'Suppression définitive', 
+    moveToFolder: 'Déplacement' 
+  }
   actionInProgress.value = true; operationResult.value = ''
   currentOperation.value = labels[action] + ' en cours...'
   const paths = selected.map(i => i.path)
@@ -260,10 +282,19 @@ async function doExecuteAction(action) {
   try {
     let results
     switch (action) {
-      case 'trash': results = await window.electronAPI.moveToTrash(paths); break
-      case 'delete': results = await window.electronAPI.permanentDelete(paths); break
-      case 'moveToFolder': results = await window.electronAPI.moveToFolder(paths, moveDestination.value); moveDestination.value = ''; break
-      default: currentOperation.value = ''; return
+      case 'trash': 
+        results = await window.electronAPI.moveToTrash(paths); 
+        break
+      case 'delete': 
+        results = await window.electronAPI.permanentDelete(paths); 
+        break
+      case 'moveToFolder': 
+        results = await window.electronAPI.moveToFolder(paths, moveDestination.value); 
+        moveDestination.value = ''; 
+        break
+      default: 
+        currentOperation.value = ''; 
+        return
     }
     const sc = results.filter(r => r.success).length
     const fc = results.filter(r => !r.success).length
@@ -284,16 +315,55 @@ async function doExecuteAction(action) {
 
 async function executeAction(action) {
   const selected = getAllSelected()
-  if (selected.length === 0) { showResult('Aucun élément sélectionné', true); return }
+  if (selected.length === 0) { 
+    showResult('Aucun élément sélectionné', true); 
+    return 
+  }
 
   if (action === 'trash') {
-    if (!confirm('🗑️ Mettre à la corbeille ?\n\n' + buildItemsPreview(selected))) return
+    pendingTrashAction = selected
+    trashConfirm.value = { 
+      visible: true, 
+      message: buildItemsPreview(selected)
+    }
+    return
   } else if (action === 'delete') {
-    startDeleteConfirm()
+    pendingDeleteAction = selected
+    const challenge = deleteConfirmDialog.value?.generateChallenge('word')
+    console.log('challenge', challenge)
+    deleteConfirm.value = {
+      visible: true,
+      message: buildItemsPreview(selected),
+      challenge: challenge
+    }
     return
   }
 
   await doExecuteAction(action)
+}
+
+function onConfirmTrash() {
+  trashConfirm.value.visible = false
+  if (pendingTrashAction) {
+    doExecuteAction('trash')
+    pendingTrashAction = null
+  }
+}
+function onCancelTrash() {
+  trashConfirm.value.visible = false
+  pendingTrashAction = null
+}
+
+function onConfirmDelete() {
+  deleteConfirm.value = { visible: false, message: '', challenge: null }
+  if (pendingDeleteAction) {
+    doExecuteAction('delete')
+    pendingDeleteAction = null
+  }
+}
+function onCancelDelete() {
+  deleteConfirm.value = { visible: false, message: '', challenge: null }
+  pendingDeleteAction = null
 }
 
 async function archiveSelected() {
@@ -321,11 +391,27 @@ async function archiveSelected() {
 async function deleteSelectedShortcuts() {
   const sc = duplicateShortcuts.value.filter(s => s.selected)
   if (sc.length === 0) { showResult('Aucun raccourci dupliqué sélectionné', true); return }
-  let msg = '🗑️ Supprimer ' + sc.length + ' raccourci(s) dupliqué(s) ?\n\n'
+  pendingShortcutAction = sc
+  let msg = '🗑️ ' + sc.length + ' raccourci(s) dupliqué(s) :\n\n'
   for (const s of sc.slice(0, 5)) msg += '🔗 ' + s.name + '\n'
   if (sc.length > 5) msg += '... et ' + (sc.length - 5) + ' autre(s)\n'
-  if (!confirm(msg)) return
+  shortcutConfirm.value = { visible: true, message: msg }
+}
+
+function onConfirmShortcut() {
+  shortcutConfirm.value.visible = false
+  if (!pendingShortcutAction) return
+  const sc = pendingShortcutAction
+  pendingShortcutAction = null
   actionInProgress.value = true; currentOperation.value = 'Suppression des raccourcis...'
+  doDeleteShortcuts(sc)
+}
+function onCancelShortcut() {
+  shortcutConfirm.value.visible = false
+  pendingShortcutAction = null
+}
+
+async function doDeleteShortcuts(sc) {
   try {
     const r = await window.electronAPI.deleteShortcuts(sc.map(s => s.path))
     showResult('Suppression de ' + r.filter(x => x.success).length + ' raccourci(s)', false)
@@ -336,8 +422,23 @@ async function deleteSelectedShortcuts() {
 }
 
 async function emptyRecycleBin() {
-  if (!confirm('🗑️ Vider la corbeille ?\n\nLa corbeille contient ' + recycleBinCount.value + ' élément' + (recycleBinCount.value !== 1 ? 's' : '') + '.\n\n⚠️ Attention : la suppression est définitive !')) return
+  recycleBinConfirm.value = {
+    visible: true,
+    message: 'La corbeille contient ' + recycleBinCount.value + ' élément' + (recycleBinCount.value !== 1 ? 's' : '') + '.\n\n⚠️ Attention : la suppression est définitive !',
+    challenge: recycleBinConfirmDialog.value?.generateChallenge('word')
+  }
+}
+
+function onConfirmRecycleBin() {
+  recycleBinConfirm.value.visible = false
   actionInProgress.value = true; operationResult.value = ''; currentOperation.value = 'Vidage de la corbeille...'
+  doEmptyRecycleBin()
+}
+function onCancelRecycleBin() {
+  recycleBinConfirm.value.visible = false
+}
+
+async function doEmptyRecycleBin() {
   try {
     const r = await window.electronAPI.emptyRecycleBin()
     if (r.success) showResult('La corbeille a été vidée.', false)
@@ -576,6 +677,53 @@ onUnmounted(() => {
       :item="contextMenu.item"
       @close="closeContextMenu"
       @action="contextAction"
+    />
+
+    <!-- Confirm dialogs (#17) -->
+    <ConfirmDialog
+      :visible="trashConfirm.visible"
+      title="🗑️ Mettre à la corbeille ?"
+      :message="trashConfirm.message"
+      confirm-text="Mettre à la corbeille"
+      danger
+      @confirm="onConfirmTrash"
+      @cancel="onCancelTrash"
+    />
+
+    <ConfirmDialog
+      :visible="shortcutConfirm.visible"
+      title="🗑️ Supprimer les raccourcis ?"
+      :message="shortcutConfirm.message"
+      confirm-text="Supprimer"
+      danger
+      @confirm="onConfirmShortcut"
+      @cancel="onCancelShortcut"
+    />
+
+    <ConfirmDialog
+      ref="recycleBinConfirmDialog"
+      :visible="recycleBinConfirm.visible"
+      title="🗑️ Vider la corbeille ?"
+      :message="recycleBinConfirm.message"
+      :challenge="recycleBinConfirm.challenge"
+      confirm-text="Vider la corbeille"
+      cancel-text="Annuler"
+      danger
+      @confirm="onConfirmRecycleBin"
+      @cancel="onCancelRecycleBin"
+    />
+
+    <ConfirmDialog
+      ref="deleteConfirmDialog"
+      :visible="deleteConfirm.visible"
+      title="⚠️ Suppression définitive"
+      :message="deleteConfirm.message"
+      :challenge="deleteConfirm.challenge"
+      confirm-text="Confirmer"
+      cancel-text="Annuler"
+      danger
+      @confirm="onConfirmDelete"
+      @cancel="onCancelDelete"
     />
   </div>
 </template>

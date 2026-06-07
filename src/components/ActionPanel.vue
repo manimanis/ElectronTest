@@ -1,6 +1,7 @@
 <script setup>
 /**
  * ActionPanel.vue - Right sidebar with action buttons and selection info
+ * La confirmation de suppression se fait via ConfirmDialog (dans CleanerView)
  */
 import { formatSize } from '../utils/format'
 
@@ -9,9 +10,7 @@ defineProps({
   totalSelectedSize: { type: String, default: '0 B' },
   currentOperation: { type: String, default: '' },
   actionInProgress: { type: Boolean, default: false },
-  sessionStats: { type: Object, default: () => ({ itemsCleaned: 0, spaceFreed: 0, operationCount: 0 }) },
-  deleteConfirmStep: { type: Number, default: 0 },
-  deleteConfirmText: { type: String, default: '' }
+  sessionStats: { type: Object, default: () => ({ itemsCleaned: 0, spaceFreed: 0, operationCount: 0 }) }
 })
 
 const emit = defineEmits([
@@ -19,10 +18,7 @@ const emit = defineEmits([
   'archive-selected',
   'move-to-folder',
   'trash',
-  'delete',
-  'confirm-delete',
-  'cancel-delete',
-  'update:deleteConfirmText'
+  'delete'
 ])
 </script>
 
@@ -46,30 +42,6 @@ const emit = defineEmits([
         {{ sessionStats.itemsCleaned }} élément(s) —
         {{ formatSize(sessionStats.spaceFreed) }}
       </span>
-    </div>
-
-    <!-- Double confirmation for delete -->
-    <div v-if="deleteConfirmStep === 1" class="delete-confirm-box">
-      <p class="confirm-title">⚠️ Suppression définitive</p>
-      <p class="confirm-desc">Tapez <strong>SUPPRIMER</strong> pour confirmer :</p>
-      <div class="confirm-input-row">
-        <input
-          type="text"
-          class="confirm-input"
-          :value="deleteConfirmText"
-          @input="emit('update:deleteConfirmText', $event.target.value)"
-          placeholder="SUPPRIMER"
-          autofocus
-          @keyup.enter="emit('confirm-delete')"
-          @keyup.esc="emit('cancel-delete')"
-        />
-        <button
-          class="confirm-btn"
-          :disabled="deleteConfirmText !== 'SUPPRIMER'"
-          @click="emit('confirm-delete')"
-        >Confirmer</button>
-        <button class="cancel-btn" @click="emit('cancel-delete')">Annuler</button>
-      </div>
     </div>
 
     <div class="action-buttons-list">
@@ -220,73 +192,6 @@ const emit = defineEmits([
   color: #888;
 }
 
-.delete-confirm-box {
-  padding: 12px;
-  background: rgba(61, 26, 26, 0.6);
-  border: 1px solid #e74c3c;
-  border-radius: 8px;
-}
-
-.confirm-title {
-  font-size: 0.9rem;
-  color: #ff6b6b;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.confirm-desc {
-  font-size: 0.8rem;
-  color: #ccc;
-  margin-bottom: 8px;
-}
-
-.confirm-input-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.confirm-input {
-  flex: 1;
-  padding: 6px 10px;
-  background: #151528;
-  border: 1px solid #e74c3c;
-  border-radius: 4px;
-  color: #ff6b6b;
-  font-size: 0.85rem;
-  outline: none;
-  font-family: monospace;
-}
-
-.confirm-input::placeholder { color: #663333; }
-
-.confirm-btn {
-  padding: 6px 12px;
-  background: #e74c3c;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.confirm-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-.cancel-btn {
-  padding: 6px 12px;
-  background: #2a2a3e;
-  border: none;
-  border-radius: 4px;
-  color: #888;
-  font-size: 0.8rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.cancel-btn:hover { background: #3a3a4e; color: #ccc; }
-
 .action-buttons-list { display: flex; flex-direction: column; gap: 8px; }
 
 .action-btn-full {
@@ -357,6 +262,5 @@ const emit = defineEmits([
   .action-btn-full span:not(.btn-icon) { display: none; }
   .btn-icon { width: auto; font-size: 1.2rem; }
   .action-separator { display: none; }
-  .delete-confirm-box { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); z-index: 200; }
 }
 </style>

@@ -11,8 +11,6 @@ describe('ActionPanel.vue', () => {
         currentOperation: '',
         actionInProgress: false,
         sessionStats: { itemsCleaned: 0, spaceFreed: 0, operationCount: 0 },
-        deleteConfirmStep: 0,
-        deleteConfirmText: '',
         ...props
       }
     })
@@ -97,29 +95,5 @@ describe('ActionPanel.vue', () => {
       sessionStats: { itemsCleaned: 0, spaceFreed: 0, operationCount: 0 }
     })
     expect(wrapper.find('.session-stats').exists()).toBe(false)
-  })
-
-  it('shows delete confirm box when deleteConfirmStep is 1', () => {
-    const wrapper = createWrapper({ deleteConfirmStep: 1 })
-    expect(wrapper.find('.delete-confirm-box').exists()).toBe(true)
-    expect(wrapper.text()).toContain('SUPPRIMER')
-  })
-
-  it('hides delete confirm box by default', () => {
-    const wrapper = createWrapper({ deleteConfirmStep: 0 })
-    expect(wrapper.find('.delete-confirm-box').exists()).toBe(false)
-  })
-
-  it('confirms button is disabled when text does not match', async () => {
-    const wrapper = createWrapper({ deleteConfirmStep: 1, deleteConfirmText: 'wrong' })
-    const confirmBtn = wrapper.find('.confirm-btn')
-    expect(confirmBtn.attributes('disabled')).toBeDefined()
-  })
-
-  it('emits cancel-delete when cancel button clicked', async () => {
-    const wrapper = createWrapper({ deleteConfirmStep: 1 })
-    const cancelBtn = wrapper.find('.cancel-btn')
-    await cancelBtn.trigger('click')
-    expect(wrapper.emitted('cancel-delete')).toBeTruthy()
   })
 })

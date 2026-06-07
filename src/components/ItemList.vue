@@ -3,7 +3,7 @@
  * ItemList.vue - Virtualized item list with sorting, search, and date filtering
  * Uses vue-virtual-scroller for performance with large folders
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
@@ -14,6 +14,23 @@ const props = defineProps({
   rawSearchQuery: { type: String, default: '' },
   dateFilter: { type: String, default: 'all' },
   lastClickedItemPath: { type: String, default: null }
+})
+
+const scrollerHeight = ref(400)
+function updateScrollerHeight() {
+  // Calculate available height: viewport - header - tabs - sort - filters - margins
+  const headerOffset = 380 // Approximate height of all elements above the scroller
+  const available = window.innerHeight - headerOffset
+  scrollerHeight.value = Math.max(200, Math.min(available, 700))
+}
+
+onMounted(() => {
+  updateScrollerHeight()
+  window.addEventListener('resize', updateScrollerHeight)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateScrollerHeight)
 })
 
 const emit = defineEmits([
@@ -419,8 +436,8 @@ const isIndeterminate = computed(() => {
 .select-all-row { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #252540; }
 
 .virtual-scroller {
-  max-height: 400px;
   overflow-y: auto;
+  transition: max-height 0.2s ease;
 }
 
 .items-list {} /* placeholder */
