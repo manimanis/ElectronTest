@@ -10,6 +10,17 @@ import os from 'os'
 import { fileURLToPath } from 'url'
 import sevenZip from '7zip-bin'
 import { execSync } from 'child_process'
+import {
+  formatSize,
+  buildResolvedPath,
+  isShortcut,
+  buildArchiveName,
+  getDefaultConfig as getDefaultConfigBase,
+  resolveSevenZipPath,
+  sortChildren,
+  calculateStats,
+  serializeForIpc
+} from './utils.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -26,19 +37,6 @@ console.log = (...args) => {
 };
 
 /**
- * Format file size to human-readable string
- * @param {number} bytes - Size in bytes
- * @returns {string} Formatted size (e.g. "1.5 GB")
- */
-function formatSize(bytes) {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const k = 1024
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + units[i]
-}
-
-/**
  * Configuration file path (stored in user data directory)
  */
 function getConfigPath() {
@@ -46,17 +44,10 @@ function getConfigPath() {
 }
 
 /**
- * Default folder configuration
+ * Default folder configuration (wraps utils version with os.homedir)
  */
 function getDefaultConfig() {
-  const homeDir = os.homedir()
-  return {
-    folders: [
-      { name: 'Desktop', path: path.join(homeDir, 'Desktop'), isRegex: false, enabled: true },
-      { name: 'Documents', path: path.join(homeDir, 'Documents'), isRegex: false, enabled: true },
-      { name: 'Downloads', path: path.join(homeDir, 'Downloads'), isRegex: false, enabled: true }
-    ]
-  }
+  return getDefaultConfigBase(os.homedir())
 }
 
 /**
@@ -87,18 +78,6 @@ function saveConfig(config) {
     console.error('Failed to save config:', err.message)
     return false
   }
-}
-
-/**
- * Build a resolved path from a base path and a suffix string.
- * Uses path.join instead of string concatenation for proper path handling.
- */
-function buildResolvedPath(basePath, suffix) {
-  if (!suffix) return basePath
-  // Remove leading slashes/backslashes from suffix for path.join
-  const cleanSuffix = suffix.replace(/^[/\\]+/, '')
-  if (!cleanSuffix) return basePath
-  return path.join(basePath, cleanSuffix)
 }
 
 /**
@@ -642,14 +621,6 @@ function getDriveRoots() {
 
 
 /**
- * Check if a file is a shortcut (.lnk on Windows)
- */
-function isShortcut(filePath) {
-  const ext = path.extname(filePath).toLowerCase()
-  return ext === '.lnk'
-}
-
-/**
  * Check if a file is a shortcut by its symlink attribute or .lnk extension
  */
 function isShortcutOrSymlink(filePath) {
@@ -954,32 +925,6 @@ ipcMain.handle('cleaner:selectDestinationFolder', async () => {
   return result.filePaths[0]
 })
 
-/**
- * Build an archive filename from the parent folder of the first item + current date/time ISO
- * Example: if item is C:\Users\Me\Desktop\file.txt → Desktop_2026-06-06T08-30-00.7z
- */
-function buildArchiveName(items) {
-  // Get the parent folder name of the first item
-  let parentName = 'archive'
-  if (items.length > 0) {
-    const parentDir = path.dirname(items[0])
-    parentName = path.basename(parentDir)
-  }
-
-  // ISO-like date/time without colons (safe for filenames)
-  const now = new Date()
-  const pad = (n) => n.toString().padStart(2, '0')
-  const dateStr =
-    now.getFullYear() + '-' +
-    pad(now.getMonth() + 1) + '-' +
-    pad(now.getDate()) + 'T' +
-    pad(now.getHours()) + '-' +
-    pad(now.getMinutes()) + '-' +
-    pad(now.getSeconds())
-
-  return `${parentName}_${dateStr}.7z`
-}
-
 function getSevenZipPath() {
   let sevenZipPath = sevenZip.path7za
 
@@ -1204,18 +1149,6 @@ ipcMain.handle('cleaner:deleteShortcuts', async (event, shortcutPaths) => {
 })
 
 // ============== Configuration IPC Handlers ==============
-
-/**
- * Helper: safely serialize data for IPC (prevents "An object could not be cloned" errors)
- */
-function serializeForIpc(data) {
-  try {
-    return JSON.parse(JSON.stringify(data))
-  } catch (err) {
-    console.error('IPC serialization error:', err.message)
-    return null
-  }
-}
 
 /**
  * Load folder configuration
