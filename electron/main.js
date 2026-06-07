@@ -852,17 +852,16 @@ function moveToFolder(filePath, targetDir) {
 // Cleaning IPC Handlers
 
 /**
- * Get standard folders and their contents for cleaning
- * Now uses the configured folders instead of hardcoded ones
+ * Get standard folders (metadata only, no items — lazy loading)
+ * Items for each folder are loaded on demand when tab is selected
  */
 ipcMain.handle('cleaner:getStandardFolders', async () => {
   const folders = getConfiguredFolders()
-  const itemsPromises = folders.map(async (f) => ({
+  return folders.map((f) => ({
     ...f,
     exists: fs.existsSync(f.path),
-    items: fs.existsSync(f.path) ? await scanFolderForCleaning(f.path) : []
+    items: [] // Items loaded lazily via cleaner:scanFolder
   }))
-  return Promise.all(itemsPromises)
 })
 
 /**

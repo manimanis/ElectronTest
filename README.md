@@ -6,6 +6,7 @@ Application desktop construite avec **Vue.js 3** et **Electron** pour nettoyer v
 ![Technologies](https://img.shields.io/badge/Electron-41-47848F?logo=electron)
 ![Technologies](https://img.shields.io/badge/Vite-6-646CFF?logo=vite)
 ![Technologies](https://img.shields.io/badge/7zip--bin-5-FF6600)
+![Tests](https://img.shields.io/badge/Tests-108%20passed-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ---
@@ -21,6 +22,7 @@ Application desktop construite avec **Vue.js 3** et **Electron** pour nettoyer v
 | **Tri multi-colonnes** | Clic pour tri par un champ, Shift+clic pour ajouter un critère secondaire ou tertiaire |
 | **Tri toujours dossiers d'abord** | Les dossiers apparaissent avant les fichiers quel que soit le critère de tri |
 | **Sélection globale** | Sélectionner/sélectionner tout dans n'importe quel onglet |
+| **Chargement déferré (lazy)** | Le contenu de chaque dossier est chargé uniquement quand l'utilisateur clique sur son onglet |
 | **Confirmation avant suppression** | Dialogue de confirmation affichant le nombre de dossiers/fichiers sélectionnés |
 
 ### Détecter et nettoyer
@@ -95,22 +97,32 @@ Output dans `release/` :
 ElectronTest/
 ├── electron/                  # Electron main process
 │   ├── main.js                # Fenêtre, handlers IPC, logique filesystem
+│   ├── utils.js               # Fonctions pures (formatSize, isShortcut, sort, calculs...)
 │   └── preload.js             # Secure bridge (contextBridge API)
 ├── src/                       # Vue 3 frontend
 │   ├── main.js                # Point d'entrée Vue
 │   ├── App.vue                # Composant racine avec navigation
 │   ├── router/
-│   │   └── index.js           # Vue Router (CleanerView, AboutView)
+│   │   └── index.js           # Vue Router (CleanerView, AboutView, FolderConfigView)
+│   ├── components/            # Composants réutilisables (TabBar, ItemList, ActionPanel...)
+│   ├── utils/                 # Utilitaires frontend (format.js)
 │   └── views/
 │       ├── CleanerView.vue    # Page principale de nettoyage
-│       └── AboutView.vue      # Page À propos
+│       ├── AboutView.vue      # Page À propos
+│       └── FolderConfigView.vue # Configuration des dossiers
+├── tests/                     # Tests unitaires (Vitest)
+│   ├── electron.test.js       # 56 tests pour les fonctions Electron
+│   ├── format.test.js         # 7 tests pour formatSize
+│   ├── setup.js               # Mock electronAPI
+│   └── components/            # Tests des composants Vue
 ├── build/                     # Assets de l'application
 │   └── icon.svg               # Icône SVG source
 ├── scripts/                   # Scripts d'aide au build
-│   ├── generate-icon.mjs      # Conversion SVG → ICO/PNG (ESM)
-│   └── generate-icon.js       # Script documenté (CommonJS)
+│   └── generate-icon.mjs      # Conversion SVG → ICO/PNG (ESM)
+├── .github/workflows/         # CI/CD (lint + tests + build)
 ├── index.html                 # HTML d'entrée
 ├── vite.config.js             # Configuration Vite + electron plugin
+├── vitest.config.ts           # Configuration Vitest
 └── package.json               # Dépendances et scripts
 ```
 
@@ -128,6 +140,7 @@ ElectronTest/
 | **File System** | Node.js `fs` module (via main process) |
 | **7zip** | 7zip-bin (7za.exe binaire inclus) |
 | **Icône** | Sharp + png-to-ico |
+| **Tests** | Vitest + happy-dom (108 tests) |
 | **Communication** | IPC + contextBridge (sécurisé) |
 
 ---
@@ -157,6 +170,45 @@ Les critères s'affichent avec un code couleur :
 - 🔵 **Primaire** (fond violet) — 1er critère
 - 🟣 **Secondaire** (fond violet foncé) — 2e critère
 - ⚫ **Tertiaire** (fond très sombre) — 3e critère
+
+---
+
+## ⚡ Chargement déferré (lazy loading)
+
+Depuis le 7 juin 2026, le contenu des dossiers est chargé **à la demande** :
+
+1. Au lancement → seuls les noms des dossiers sont chargés (rapide)
+2. Le contenu du **premier onglet** est chargé immédiatement
+3. Quand l'utilisateur clique sur un autre onglet → son contenu est chargé
+4. Les dossiers déjà chargés sont **mis en cache** → pas de rechargement
+5. Le bouton **Recharger** (F5) vide le cache et recharge tout
+
+---
+
+## 🧪 Tests unitaires
+
+Le projet utilise **Vitest** avec **happy-dom** pour les tests :
+
+```bash
+# Lancer tous les tests
+npm test
+
+# Mode watch
+npm run test:watch
+```
+
+**108 tests répartis sur 6 fichiers :**
+
+| Fichier | Tests | Description |
+|---------|-------|-------------|
+| `tests/electron.test.js` | 56 | Fonctions Electron (formatSize, isShortcut, serializeForIpc, calculateStats...) |
+| `tests/format.test.js` | 7 | formatSize |
+| `tests/components/ActionPanel.test.js` | 12 | Panneau d'actions |
+| `tests/components/ConfirmDialog.test.js` | 18 | Dialogue de confirmation |
+| `tests/components/TabBar.test.js` | 7 | Barre d'onglets |
+| `tests/components/RecycleBinBar.test.js` | 8 | Barre corbeille |
+
+Les fonctions pures d'Electron sont extraites dans `electron/utils.js` et testées directement sans moquer Electron.
 
 ---
 

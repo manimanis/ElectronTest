@@ -18,6 +18,8 @@ const folders = ref([])
 const loading = ref(true)
 const initialLoadDone = ref(false)
 const error = ref('')
+const loadingFolder = ref(null) // path of folder currently loading
+const foldersLoaded = ref(new Set()) // set of folder paths that have items loaded
 const actionInProgress = ref(false)
 const operationResult = ref('')
 const selectedItems = ref({})
@@ -167,6 +169,33 @@ async function loadFolders() {
   }
 }
 
+/**
+ * Lazy-load items for a specific folder when its tab is selected.
+ * Only loads if items haven't been loaded yet.
+ */
+async function loadFolderItems(folderPath) {
+  if (foldersLoaded.value.has(folderPath)) return
+  const folder = folders.value.find(f => f.path === folderPath)
+  if (!folder) return
+
+  loadingFolder.value = folderPath
+  try {
+    folder.items = await window.electronAPI.scanFolder(folderPath)
+    foldersLoaded.value = new Set([...foldersLoaded.value, folderPath])
+  } catch (err) {
+    console.error('Failed to load items for', folderPath, err.message)
+  } finally {
+    loadingFolder.value = null
+  }
+}
+
+/** Watch activeTab changes to lazy-load folder contents */
+watch(activeTab, (newTab) => {
+  if (folders.value[newTab]) {
+    loadFolderItems(folders.value[newTab].path)
+  }
+})
+
 async function loadDuplicateShortcuts() {
   loadingShortcuts.value = true
   try {
@@ -305,7 +334,8 @@ async function doExecuteAction(action) {
       showResult('Traitement de ' + sc + ' élément(s), ' + fc + ' échoué(s)', true)
       if (sc > 0) updateSessionStats(sc, freedBytes)
     }
-    await loadFolders()
+    // Recharge les dossiers et leur contenu après modification
+    await refreshAllData()
   } catch (err) {
     showResult('Erreur : ' + err.message, true)
   } finally {
@@ -415,8 +445,7 @@ async function doDeleteShortcuts(sc) {
   try {
     const r = await window.electronAPI.deleteShortcuts(sc.map(s => s.path))
     showResult('Suppression de ' + r.filter(x => x.success).length + ' raccourci(s)', false)
-    await loadDuplicateShortcuts()
-    await loadFolders()
+    await refreshAllData()
   } catch (err) { showResult('Erreur : ' + err.message, true) }
   finally { actionInProgress.value = false; currentOperation.value = '' }
 }
@@ -463,7 +492,17 @@ function openActiveFolderInExplorer() {
 }
 
 async function refreshAllData() {
+  // Clear lazy-load cache so all folders reload on next tab click
+  foldersLoaded.value = new Set()
+  // Clear item arrays from all folders
+  for (const f of folders.value) {
+    f.items = []
+  }
   await loadFolders()
+  // Reload items for current active tab
+  if (folders.value[activeTab.value]) {
+    await loadFolderItems(folders.value[activeTab.value].path)
+  }
   await loadDuplicateShortcuts()
   await checkRecycleBin()
 }
@@ -543,6 +582,10 @@ onMounted(async () => {
     if (!isNaN(savedTab) && savedTab < folders.value.length) {
       activeTab.value = savedTab
     }
+    // Load items for the initial active tab only
+    if (folders.value[activeTab.value]) {
+      await loadFolderItems(folders.value[activeTab.value].path)
+    }
   }
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('click', closeContextMenu)
@@ -607,22 +650,27 @@ onUnmounted(() => {
           @update:activeTab="activeTab = $event"
         />
 
-        <template v-if="folders.length > 0">
-          <!-- Item list with virtual scroller -->
-          <ItemList
-            :folder="folders[activeTab]"
-            :selected-items="selectedItems[folders[activeTab].path] || new Set()"
-            :sort-criteria="sortCriteria[folders[activeTab].path] || []"
-            :raw-search-query="rawSearchQuery"
-            :date-filter="dateFilter"
-            @toggle-item="(itemPath, event) => toggleItem(folders[activeTab].path, itemPath, event)"
-            @toggle-all="(checked) => toggleAll(folders[activeTab].path, checked)"
-            @toggle-sort="(field, event) => toggleSort(folders[activeTab].path, field, event)"
-            @update:rawSearchQuery="rawSearchQuery = $event"
-            @update:dateFilter="dateFilter = $event"
-            @context-menu="(e, item) => openContextMenu(e, item)"
-            @row-click="(itemPath, event) => onRowClick(folders[activeTab].path, itemPath, event)"
-          />
+<template v-if="folders.length > 0">
+  <!-- Loading state for current folder -->
+  <div v-if="loadingFolder === folders[activeTab].path" class="loading-overlay inline">
+    <div class="spinner small-spinner"></div><span>Chargement du contenu...</span>
+  </div>
+
+  <!-- Item list with virtual scroller -->
+  <ItemList
+    :folder="folders[activeTab]"
+    :selected-items="selectedItems[folders[activeTab].path] || new Set()"
+    :sort-criteria="sortCriteria[folders[activeTab].path] || []"
+    :raw-search-query="rawSearchQuery"
+    :date-filter="dateFilter"
+    @toggle-item="(itemPath, event) => toggleItem(folders[activeTab].path, itemPath, event)"
+    @toggle-all="(checked) => toggleAll(folders[activeTab].path, checked)"
+    @toggle-sort="(field, event) => toggleSort(folders[activeTab].path, field, event)"
+    @update:rawSearchQuery="rawSearchQuery = $event"
+    @update:dateFilter="dateFilter = $event"
+    @context-menu="(e, item) => openContextMenu(e, item)"
+    @row-click="(itemPath, event) => onRowClick(folders[activeTab].path, itemPath, event)"
+  />
 
           <!-- Recycle bin -->
           <RecycleBinBar
