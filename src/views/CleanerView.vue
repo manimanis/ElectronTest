@@ -9,7 +9,6 @@ import TabBar from '../components/TabBar.vue'
 import ItemList from '../components/ItemList.vue'
 import ActionPanel from '../components/ActionPanel.vue'
 import ShortcutSection from '../components/ShortcutSection.vue'
-import DuplicateFilesSection from '../components/DuplicateFilesSection.vue'
 import RecycleBinBar from '../components/RecycleBinBar.vue'
 import ContextMenu from '../components/ContextMenu.vue'
 
@@ -36,9 +35,6 @@ const currentOperation = ref('')
 const dateFilter = ref('all')
 const sessionStats = ref({ itemsCleaned: 0, spaceFreed: 0, operationCount: 0 })
 const contextMenu = ref({ visible: false, x: 0, y: 0, item: null })
-const duplicateFiles = ref([])
-const loadingDuplicates = ref(false)
-const showDuplicateSection = ref(false)
 const deleteConfirmStep = ref(0)
 const deleteConfirmText = ref('')
 
@@ -162,18 +158,6 @@ async function loadDuplicateShortcuts() {
     console.error('Échec du chargement des raccourcis dupliqués :', err)
   } finally {
     loadingShortcuts.value = false
-  }
-}
-
-async function loadDuplicateFiles() {
-  loadingDuplicates.value = true
-  try {
-    duplicateFiles.value = await window.electronAPI.findDuplicateFiles()
-    if (duplicateFiles.value.length > 0) showDuplicateSection.value = true
-  } catch (err) {
-    console.error('Erreur chargement doublons:', err)
-  } finally {
-    loadingDuplicates.value = false
   }
 }
 
@@ -380,7 +364,6 @@ function openActiveFolderInExplorer() {
 async function refreshAllData() {
   await loadFolders()
   await loadDuplicateShortcuts()
-  await loadDuplicateFiles()
   await checkRecycleBin()
 }
 
@@ -453,7 +436,6 @@ onMounted(async () => {
   if (!initialLoadDone.value) {
     await loadFolders()
     await loadDuplicateShortcuts()
-    await loadDuplicateFiles()
     await checkRecycleBin()
     initialLoadDone.value = true
     const savedTab = parseInt(localStorage.getItem('cleaner_activeTab'), 10)
@@ -557,12 +539,6 @@ onUnmounted(() => {
             @toggle-shortcut="toggleShortcut"
             @toggle-all-shortcuts="toggleAllShortcuts"
             @delete-selected-shortcuts="deleteSelectedShortcuts"
-          />
-
-          <!-- Duplicate files section -->
-          <DuplicateFilesSection
-            :duplicate-files="duplicateFiles"
-            :loading-duplicates="loadingDuplicates"
           />
         </template>
 

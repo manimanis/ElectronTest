@@ -57,7 +57,7 @@ onUnmounted(() => {
   </Teleport>
 </template>
 
-<style>
+<style scoped>
 .context-menu {
   position: fixed;
   z-index: 10000;

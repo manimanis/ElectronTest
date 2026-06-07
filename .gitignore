@@ -29,7 +29,7 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-tests/
+my-tests/
 
 # Package lock is committed for reproducible builds
 # package-lock.json is kept intentionally

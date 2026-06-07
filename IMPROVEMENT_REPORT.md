@@ -1,247 +1,295 @@
 # 📋 Rapport d'améliorations — Folder Cleaner
 
-Analyse complète du projet avec les améliorations fonctionnelles et visuelles possibles.
+Analyse complète du projet Electron + Vue.js 3. Ce rapport identifie **les améliorations encore pertinentes** en tenant compte de ce qui a déjà été implémenté.
+
+> **Note** : Ce rapport est mis à jour régulièrement. Les cases cochées ci-dessous reflètent l'état actuel du code.
 
 ---
 
-## 🏗️ Architecture & Structure du code
+## 🔴 Problèmes critiques (Sécurité)
 
-### 1. Code dupliqué entre main.js et les vues
-- **Problème** : La fonction `formatSize()` est dupliquée dans `CleanerView.vue` (ligne 170) et `electron/main.js` (ligne 459).
-- **Solution** : Créer un module partagé `src/utils/format.js` ou l'utiliser depuis le preload.
-- **Impact** : Maintenance simplifiée, cohérence des formats.
+### 1. `nodeIntegration: true` — VULNÉRABILITÉ SÉCURITÉ
+- **Fichier** : `electron/main.js` ligne 359
+- **Problème** : `nodeIntegration` est `true` alors qu'il y a un commentaire TODO disant qu'il devrait être `false`. Avec `contextIsolation: true` et un preload script, **nodeIntegration devrait être `false`** pour éviter les attaques XSS qui pourraient accéder au système de fichiers.
+- **Solution** : Mettre `nodeIntegration: false` dans les `webPreferences`. Le code utilise déjà le preload script correctement, donc cela devrait fonctionner.
+- **Impact** : 🔴 Sécurité critique — un site web malveillant chargé dans le renderer pourrait exécuter du code Node.js.
 
-### 2. Composants monolithiques
-- **Problème** : `CleanerView.vue` fait 1494 lignes avec script + template + styles mélangés.
-- **Solution** : Extraire des sous-composants :
-  - `TabBar.vue` — Barre d'onglets
-  - `ItemList.vue` — Liste des éléments avec tri
-  - `ActionPanel.vue` — Panneau d'actions (droite)
-  - `ShortcutSection.vue` — Section raccourcis dupliqués
-  - `RecycleBinBar.vue` — Barre corbeille
-- **Impact** : Lisibilité, réutilisabilité, testabilité.
-
-### 3. Constants et configuration centralisée
-- **Problème** : Les couleurs, timeouts, et limites sont en dur partout (ex: `4000ms` pour `showResult`, `250px` max-height).
-- **Solution** : Créer `src/constants.js` pour les valeurs de configuration partagées.
-- **Impact** : Personnalisation facilitée, moins de bugs.
+### 2. ~~`console.log` écrasé globalement — crash potentiel~~ ✅ Corrigé
+- **Fichier** : `electron/main.js` lignes 15-20
+- **Statut** : Corrigé — null check sur `mainWindow` + appel à `originalLog` ajouté.
 
 ---
 
-## 🎨 Améliorations visuelles
+## 🟠 Problèmes de qualité du code
 
-### 4. Animations et transitions
-- **Manque** : Aucune animation de transition entre les pages (route changes).
-- **Solution** : Ajouter des `<Transition>` dans le router-view de `App.vue` :
-  ```vue
-  <router-view v-slot="{ Component }">
-    <transition name="fade" mode="out-in">
-      <keep-alive>
-        <component :is="Component" />
-      </keep-alive>
-    </transition>
-  </router-view>
-  ```
-- **Bonus** : Ajouter des animations d'entrée pour les cartes et listes (stagger animation).
+### 3. `formatSize()` dupliqué entre main.js et format.js
+- **Fichiers** : `electron/main.js` (ligne 23) et `src/utils/format.js`
+- **Problème** : La fonction `formatSize()` existe dans les deux fichiers avec exactement le même code. Le rapport précédent suggérait de créer `src/utils/format.js` — c'est fait côté frontend, mais **main.js n'utilise toujours pas le module partagé**.
+- **Solution** : Supprimer `formatSize()` de `main.js` et l'importer depuis un module partagé, ou accepter la duplication pour le processus principal (qui ne peut pas importer des modules ES).
+- **Impact** : Maintenance, cohérence.
 
-### 5. Thème sombre amélioré
-- **Manque** : Pas de support de thème clair / toggle thème.
-- **Solution** : Implémenter un système de thème avec CSS variables (`--bg-primary`, `--bg-secondary`, etc.) et un toggle dans la nav.
-- **Impact** : Accessibilité, confort visuel.
+### 4. Code mort (dead code)
+- **`getStandardFolders()`** (`electron/main.js` ligne 664-677) : Jamais appelée, remplacée par `getConfiguredFolders()`.
+- **`findBacFolders()`** (`electron/main.js` ligne 638-658) : Jamais appelée.
+- **`isAllSelected()`** (`src/components/ShortcutSection.vue` ligne 17-19) : Toujours retourne `false`, non utilisée.
+- **`logger`** (`src/utils/logger.js`) : Module jamais importé nulle part dans le projet.
+- **Solution** : Supprimer tout le code mort.
+- **Impact** : Lisibilité, taille du bundle.
 
-### 6. Indicateurs de chargement plus riches
-- **Manque** : Le spinner est basique (cercle CSS).
-- **Solution** : Ajouter une barre de progression pour les opérations longues (archivage, scan), ou un skeleton loader pendant le chargement initial.
+### 5. ~~Import redondant de `shell` dans les IPC handlers~~ ✅ Corrigé
+- **Statut** : Corrigé — les `require('electron')` redondants dans les IPC handlers ont été supprimés.
 
-### 7. Badges et compteurs plus visibles
-- **Manque** : Les badges dans les onglets sont petits et peu visibles.
-- **Solution** : Utiliser des couleurs vives pour les badges (ex: rouge si des éléments sélectionnés, vert sinon), avec un compteur animé.
+### 6. ~~`require('child_process')` appelé en inline~~ ✅ Corrigé
+- **Statut** : Corrigé — `execSync` est maintenant importé en haut du fichier.
 
-### 8. Icônes SVG au lieu d'emojis
-- **Manque** : L'application utilise des emojis partout (🧹, 📂, 🗑️…).
-- **Solution** : Utiliser des icônes SVG (ex: Lucide, Heroicons) pour un rendu plus professionnel et consistant.
-- **Impact** : Apparence plus polie, meilleure résolution sur écrans haute densité.
+### 7. ~~`path` importé mais jamais utilisé dans vite.config.js~~ ✅ Corrigé
+- **Statut** : Corrigé — l'import inutilisé a été supprimé.
 
-### 9. Responsive design amélioré
-- **Manque** : Le layout grid passe en colonne unique sous 900px, mais le panneau d'actions pourrait mieux s'adapter.
-- **Solution** :
-  - Sur mobile : transformer le panneau d'actions en barre d'actions fixe en bas (comme une bottom sheet).
-  - Ajouter des media queries pour les petits écrans (phone/tablette).
-  - Les onglets devraient être scrollables horizontalement.
+### 8. ~~`jsdom` en devDependencies mais inutilisé~~ ✅ Corrigé
+- **Statut** : Corrigé — `jsdom` a été supprimé des devDependencies.
 
-### 10. Tooltips et infobulles
-- **Manque** : Pas de tooltips sur les boutons d'action (archiver, déplacer, corbeille).
-- **Solution** : Ajouter des tooltips explicatifs au survol pour guider l'utilisateur.
+### 9. Scripts d'icônes dupliqués
+- **Fichiers** : `scripts/generate-icon.js` et `scripts/generate-icon.mjs`
+- **Problème** : Deux scripts pour générer l'icône, potentiellement confus.
+- **Solution** : Supprimer l'ancien `generate-icon.js` et garder uniquement `generate-icon.mjs`.
+- **Impact** : Clarté.
 
 ---
 
-## ⚡ Améliorations fonctionnelles
+## 🟠 Architecture & Design
 
-### 11. Recherche/filtrage dans les listes
-- **Manque** : Impossible de filtrer les éléments affichés dans un dossier.
-- **Solution** : Ajouter une barre de recherche au-dessus de la liste des éléments, avec filtrage en temps réel par nom et par extension.
-- **Impact** : Productivité accrue pour les dossiers avec beaucoup d'éléments.
+### 10. ~~Tests unitaires~~ ✅ Implémenté
+- **Statut** : 38 tests sur 4 fichiers couvrant `formatSize`, `TabBar`, `RecycleBinBar`, `ActionPanel`. Config `vitest.config.ts` avec `happy-dom` et globals.
+- **Note** : Vitest 4.x nécessite `"type": "module"` dans `package.json` et ne supporte pas les imports explicites de `describe`/`it`/`expect` depuis `vitest` (utiliser les globals).
 
-### 12. Sélection par plage (Shift+clic)
-- **Manque** : La sélection multiple ne fonctionne qu'un par un ou "tout cocher".
-- **Solution** : Implémenter la sélection par plage : Shift+clic sur un élément sélectionne tous les éléments entre le dernier sélectionné et celui-ci (comme dans l'Explorateur Windows).
-- **Impact** : UX considérablement améliorée.
+### 11. ~~Configuration ESLint/Prettier~~ ✅ Implémenté
+- **Statut** : `eslint.config.js` (flat config), `.prettierrc`, `.prettierignore` créés. Dépendances installées.
+- **Note** : Il reste à exécuter le lint sur le code existant pour corriger les erreurs.
 
-### 13. Raccourcis clavier
-- **Manque** : Aucun raccourci clavier n'est implémenté.
+### 12. Pas de CI/CD
+- **Problème** : Pas de pipeline de build/test automatique.
+- **Solution** : Ajouter un workflow GitHub Actions pour :
+  - Lint le code
+  - Lancer les tests
+  - Builder l'application
+- **Impact** : Qualité continue.
+
+### 13. Application Windows-only sans gestion multi-plateforme
+- **Problème** : L'application est entièrement conçue pour Windows :
+  - `wmic` pour lister les disques (ligne 609)
+  - PowerShell/VBS pour la corbeille (lignes 1082-1127)
+  - Détection `.lnk` pour les raccourcis Windows
+  - Patterns de chemins avec `\`
 - **Solution** :
-  - `Ctrl+A` : Tout sélectionner
-  - `Échap` : Désélectionner tout
-  - `Suppr` : Supprimer la sélection
-  - `Ctrl+Z` : Annuler la dernière action (si historique implémenté)
-  - `F5` : Recharger les données
-- **Impact** : Productivité pour les utilisateurs avancés.
+  - Ajouter des vérifications `process.platform` avant les appels Windows-specific
+  - Fournir des fallbacks ou des messages d'erreur clairs sur macOS/Linux
+  - Ou documenter clairement que l'app est Windows-only
+- **Impact** : Portabilité.
 
-### 14. Historique d'annulation (Undo)
-- **Manque** : Les opérations de suppression/déplacement ne sont pas annulables (sauf corbeille).
-- **Solution** : Maintenir un historique des 10 dernières opérations avec possibility d'annulation.
-- **Impact** : Sécurité, confiance de l'utilisateur.
+### 14. `createMemoryHistory` vs `createWebHashHistory`
+- **Fichier** : `src/router/index.js`
+- **Problème** : `createMemoryHistory` empêche la navigation par URL. Pour Electron, `createWebHashHistory` est souvent préféré car il permet le back/forward navigation.
+- **Solution** : Évaluer le passage à `createWebHashHistory` si la navigation historique est souhaitée.
+- **Impact** : UX navigation.
 
-### 15. Progression des opérations en cours
-- **Manque** : Quand on déplace/supprime de nombreux éléments, l'UI se bloque pendant l'opération.
+---
+
+## 🟡 Améliorations fonctionnelles restantes
+
+### 15. Pas de gestion des erreurs individuelles en batch
+- **Problème** : Dans `cleaner:moveToTrash`, `cleaner:permanentDelete`, `cleaner:moveToFolder` — si un élément échoue, les suivants sont quand même traités, mais il n'y a pas de rapport détaillé par élément dans l'UI.
+- **Solution** : Afficher un résumé détaillé après chaque opération batch (ex: "3 réussis, 1 échoué — accès refusé pour `fichier.pdf`").
+- **Impact** : Transparence.
+
+### 16. Aucune annulation possible pendant les opérations batch
+- **Problème** : Les opérations `moveToTrash`, `permanentDelete`, `moveToFolder` traitent tous les éléments séquentiellement sans possibilité d'annulation intermédiaire.
+- **Solution** : Ajouter un flag d'annulation dans la boucle de traitement, similaire à `currentScanAbort` pour le scan.
+- **Impact** : UX, sécurité.
+
+### 17. `confirm()` natif utilise au lieu de modales personnalisées
+- **Fichiers** : `CleanerView.vue` (lignes 290, 339), `FolderConfigView.vue` (lignes 111, 134)
+- **Problème** : Les boîtes de dialogue `confirm()` sont natives et n'ont pas le thème de l'application.
+- **Solution** : Créer un composant `ConfirmDialog.vue` réutilisable avec le thème de l'app, ou utiliser une bibliothèque légère.
+- **Impact** : Cohérence visuelle.
+
+### 18. Pas de progression pendant l'archivage 7z
+- **Fichier** : `electron/main.js` ligne 1051
+- **Problème** : `execSync` bloque le processus principal pendant l'archivage (timeout 5 minutes). Aucune progression n'est renvoyée à l'utilisateur.
 - **Solution** :
-  - Afficher une barre de progression pour les opérations par lots.
-  - Traiter les éléments progressivement (par lots de 10-20).
-  - Permettre l'annulation pendant le traitement.
+  - Utiliser `exec` (async) au lieu de `execSync`
+  - Parser la sortie de 7zip pour extraire le pourcentage de progression
+  - Envoyer des mises à jour via `mainWindow.webContents.send('archive:progress', percent)`
 - **Impact** : UX pour les gros volumes.
 
-### 16. Sauvegarde automatique de la config
-- **Manque** : La configuration n'est sauvegardée que manuellement (bouton "Sauvegarder").
-- **Solution** : Auto-save après chaque modification (debounce de 500ms) avec indicateur visuel "Sauvegardé ✓".
-- **Impact** : Moins de perte de configuration.
+### 19. Recherche non effacée au changement d'onglet
+- **Fichier** : `CleanerView.vue`
+- **Problème** : La variable `rawSearchQuery` est partagée entre tous les onglets. Quand on change d'onglet, la recherche reste active.
+- **Solution** : Réinitialiser `rawSearchQuery` quand `activeTab` change, ou stocker la recherche par onglet.
+- **Impact** : UX.
 
-### 17. Prévisualisation avant action
-- **Manque** : Avant de supprimer/déplacer, aucun aperçu des éléments concernés.
-- **Solution** : Afficher un récapitulatif dans la boîte de confirmation : liste des éléments, taille totale, nombre de fichiers/dossiers.
-- **Impact** : Sécurité, confiance.
+### 20. La virtualisation a une hauteur fixe (400px)
+- **Fichier** : `src/components/ItemList.vue` ligne 422
+- **Problème** : Le `RecycleScroller` a un `max-height: 400px` fixe, ce qui gaspille de l'espace sur les grands écrans et en manque sur les petits.
+- **Solution** : Calculer la hauteur dynamiquement en fonction de la taille de la fenêtre, ou utiliser un `ResizeObserver`.
+- **Impact** : Responsive.
 
-### 18. Statistiques de nettoyage
-- **Manque** : Pas de suivi de l'espace libéré au fil du temps.
-- **Solution** : Ajouter un mini-dashboard avec :
-  - Espace total libéré (session)
-  - Nombre d'opérations effectuées
-  - Historique récent des actions
-- **Impact** : Motivation de l'utilisateur, visibilité sur l'impact.
+### 21. ~~Styles du ContextMenu non scoped~~ ✅ Corrigé
+- **Statut** : Corrigé — le `<style>` est maintenant `scoped`.
 
-### 19. Filtrage par date de modification
-- **Manque** : Impossible de filtrer par date (ex: "supprimer tout ce qui a plus de 30 jours").
-- **Solution** : Ajouter un filtre de date dans la liste des éléments, avec options prédéfinies (7j, 30j, 90j, 1 an).
-- **Impact** : Nettoyage plus ciblé et efficace.
-
-### 20. Ouvrir le dossier dans l'Explorateur
-- **Manque** : Pas de bouton pour ouvrir un dossier dans l'Explorateur Windows directement depuis l'onglet.
-- **Solution** : Ajouter un bouton "Ouvrir dans l'Explorateur" dans le panneau d'actions ou le header de l'onglet.
-- **Impact** : Gain de temps, productivité.
-
-### 21. Gestion des doublons par taille
-- **Manque** : La détection de doublons se base uniquement sur les raccourcis.
-- **Solution** : Étendre la détection pour trouver les fichiers/dossiers en double (même nom et/ou même taille) dans les dossiers configurés.
-- **Impact** : Nettoyage plus profond.
-
-### 22. Mode portable / multi-utilisateur
-- **Problème** : `getStandardFolders()` retourne toujours les dossiers de l'utilisateur courant.
-- **Solution** : Permettre de scanner les dossiers d'autres utilisateurs via les patterns (déjà supporté par le config), et afficher un indicateur de l'utilisateur concerné.
+### 22. `lastClickedItemPath` déclaré comme prop dans ItemList mais jamais passé
+- **Fichier** : `src/components/ItemList.vue` ligne 16
+- **Problème** : La prop `lastClickedItemPath` est définie dans ItemList mais jamais transmise depuis CleanerView.
+- **Solution** : Soit supprimer la prop (non utilisée dans le template), soit la connecter si elle est nécessaire pour un futur usage.
+- **Impact** : Propreté du code.
 
 ---
 
-## 🔒 Sécurité & Robustesse
+## 🟡 Performance
 
-### 23. Validation des chemins
-- **Manque** : Les chemins ne sont pas validés côté frontend avant envoi.
-- **Solution** : Ajouter une validation en temps réel du chemin dans FolderConfigView (déjà partiellement fait via `validateFolderPath` mais pas en live).
+### 23. Calcul synchrone des tailles de dossiers
+- **Fichier** : `electron/main.js` — `getDirectorySize()` (ligne 767) et `scanFolderForCleaning()` (ligne 795)
+- **Problème** : Le calcul des tailles est **synchrone et bloquant**. Pour un dossier avec des milliers de fichiers, cela bloque le processus principal.
+- **Solution** :
+  - Utiliser des versions asynchrones (`fs.promises.stat`, `fs.promises.readdir`)
+  - Ou calculer les tailles en arrière-plan avec un Worker
+  - Ou envoyer la progression pendant le calcul
+- **Impact** : Responsive UI pendant le scan.
 
-### 24. Gestion des erreurs améliorée
-- **Manque** : Certains messages d'erreur sont en anglais ("No items selected", "Failed to load folders").
-- **Solution** : Uniformiser tous les messages en français et utiliser un système de traduction centralisé.
-- **Impact** : Cohérence linguistique.
+### 24. Risque de stack overflow avec `getDirectorySize` récursif
+- **Fichier** : `electron/main.js` ligne 767
+- **Problème** : `getDirectorySize` est récursif sans limite de profondeur. Un lien symbolique circulaire ou un dossier très profond pourrait provoquer un stack overflow.
+- **Solution** : Ajouter un paramètre `maxDepth` et un Set de chemins visités pour détecter les cycles.
+- **Impact** : Stabilité.
 
-### 25. Protection contre les suppressions accidentelles
-- **Manque** : La suppression définitive demande une confirmation mais pas de double confirmation.
-- **Solution** : Pour la suppression définitive, demander à l'utilisateur de taper "SUPPRIMER" ou d'activer un switch de confirmation.
-- **Impact** : Sécurité critique.
-
-### 26. Logging et rapports d'erreur
-- **Manque** : Pas de système de logging côté frontend.
-- **Solution** : Implémenter un logger simple qui écrit dans un fichier de log (via IPC) pour le debugging.
-- **Impact** : Diagnostique facilité.
-
----
-
-## 📦 Performance
-
-### 27. Virtualisation des listes
-- **Problème** : `items-list` a un `max-height: 400px` avec overflow-y, mais rend TOUS les éléments du DOM.
-- **Solution** : Utiliser `vue-virtual-scroller` ou une virtualisation manuelle pour les dossiers avec beaucoup d'éléments.
-- **Impact** : Performance pour les dossiers avec 100+ éléments.
-
-### 28. Cache des tailles de dossiers
-- **Problème** : `getDirectorySize()` est appelé deux fois dans `scanFolderForCleaning()` (une fois pour `size`, une pour `formattedSize`).
-- **Solution** : Calculer la taille une seule fois et la mettre en cache.
-- **Impact** : Performance, surtout pour les gros dossiers.
-
-### 29. Debounce sur la recherche (futur)
-- **Problème** : Si un champ de recherche est ajouté (amélioration #11), il faut un debounce pour éviter trop de recalculs.
-- **Solution** : Utiliser un debounce de 200-300ms sur l'input de recherche.
+### 25. Aucun cache des résultats de scan
+- **Problème** : Chaque appel à `cleaner:getStandardFolders` rescanne entièrement tous les dossiers. Si l'utilisateur navigue entre les pages, les mêmes dossiers sont rescanés.
+- **Solution** : Implémenter un cache TTL (time-to-live) des résultats de scan, ou n'invalider le cache que lorsque l'utilisateur clique sur "Recharger".
+- **Impact** : Performance.
 
 ---
 
-## 🖥️ Expérience utilisateur
+## 🟢 Améliorations UX mineures
 
-### 30. Drag & Drop
-- **Manque** : Pas de glisser-déposer pour déplacer des éléments.
-- **Solution** : Permettre de glisser des éléments de la liste vers le bouton "Déplacer" ou vers un dossier de destination.
-- **Impact** : Interaction intuitive.
+### 26. Pas de tooltip sur les boutons d'action
+- **Problème** : Les boutons de l'ActionPanel ont des `title` mais pas de tooltip visuel styled.
+- **Solution** : Créer un composant `Tooltip` ou utiliser CSS `:hover::after` pour des tooltips stylisés.
 
-### 31. Menu contextuel (clic droit)
-- **Manque** : Pas de menu contextuel au clic droit sur les éléments.
-- **Solution** : Afficher un menu contextuel avec les actions disponibles (Ouvrir, Déplacer, Supprimer, Propriétés).
+### 27. Absence de raccourci Ctrl+Z (annulation)
+- **Problème** : Le raccourci Ctrl+Z n'est pas implémenté.
+- **Solution** : Implémenter un système d'historique d'annulation (undo stack) pour les opérations de suppression/déplacement.
 
-### 32. Multi-sélection avec Ctrl+clic
-- **Manque** : La sélection multiple se fait uniquement par checkbox.
-- **Solution** : Permettre Ctrl+clic pour sélectionner/désélectionner individuellement, et Shift+clic pour une plage (amélioration #12).
+### 28. La version dans AboutView est en dur
+- **Fichier** : `src/views/AboutView.vue` ligne 11
+- **Problème** : `Version 1.0.0` est écrite en dur au lieu d'être lue depuis `package.json`.
+- **Solution** : Utiliser `import.meta.env.VITE_APP_VERSION` ou passer la version via le preload script.
 
-### 33. Notification sonore (optionnelle)
-- **Manque** : Pas de feedback sonore après une opération.
-- **Solution** : Optionnel : jouer un son discret après une suppression/réussite (désactivé par défaut).
+### 29. Pas d'icône d'app dans la titlebar Electron
+- **Fichier** : `electron/main.js`
+- **Problème** : L'icône SVG est utilisée pour la fenêtre, mais Electron peut avoir des problèmes avec les SVG comme icônes de fenêtre sur Windows.
+- **Solution** : Utiliser l'icône `.ico` générée par `generate-icon.mjs` pour la fenêtre en production.
 
-### 34. Persistance de l'onglet actif
-- **Manque** : L'onglet actif n'est pas persisté entre les sessions.
-- **Solution** : Sauvegarder l'index de l'onglet actif dans le localStorage ou la config.
-
-### 35. Mode sombre / clair
-- **Manque** : Unique thème sombre.
-- **Solution** : Implémenter un toggle thème sombre/clair avec des CSS variables (amélioration #5).
+### 30. `allowScripts` dans package.json pourrait être plus restrictif
+- **Fichier** : `package.json` lignes 52-57
+- **Problème** : Les flags `allowScripts` pour `sharp`, `esbuild`, `electron-winstaller` sont à `true`. Cela pourrait poser des risques supply chain.
+- **Solution** : Évaluer si chaque package a vraiment besoin d'exécuter des scripts d'installation.
 
 ---
 
 ## 📊 Résumé des priorités
 
-| Priorité | Amélioration | Impact | Difficulté |
-|----------|-------------|--------|------------|
-| 🔴 Haute | #11 Recherche/filtrage | ⭐⭐⭐ | Moyenne |
-| 🔴 Haute | #12 Sélection par plage | ⭐⭐⭐ | Moyenne |
-| 🔴 Haute | #13 Raccourcis clavier | ⭐⭐⭐ | Faible |
-| 🔴 Haute | #24 Messages d'erreur FR | ⭐⭐ | Faible |
-| 🔴 Haute | #28 Cache tailles (bug perf) | ⭐⭐ | Faible |
-| 🟠 Moyenne | #1 Séparation des concerns | ⭐⭐ | Moyenne |
-| 🟠 Moyenne | #2 Composants modulaires | ⭐⭐ | Élevée |
-| 🟠 Moyenne | #9 Responsive amélioré | ⭐⭐⭐ | Moyenne |
-| 🟠 Moyenne | #15 Progression opérations | ⭐⭐ | Moyenne |
-| 🟠 Moyenne | #17 Prévisualisation | ⭐⭐ | Moyenne |
-| 🟠 Moyenne | #20 Ouvrir dans l'Explorateur | ⭐⭐ | Faible |
-| 🟢 Basse | #5 Thème clair/sombre | ⭐⭐ | Moyenne |
-| 🟢 Basse | #8 Icônes SVG | ⭐⭐ | Élevée |
-| 🟢 Basse | #14 Historique annulation | ⭐⭐⭐ | Élevée |
-| 🟢 Basse | #18 Statistiques nettoyage | ⭐ | Moyenne |
-| 🟢 Basse | #19 Filtrage par date | ⭐⭐ | Moyenne |
-| 🟢 Basse | #30 Drag & Drop | ⭐ | Élevée |
-| 🟢 Basse | #31 Menu contextuel | ⭐⭐ | Moyenne |
+| Priorité | # | Amélioration | Impact | Difficulté |
+|----------|---|-------------|--------|------------|
+| 🔴 Critique | 1 | `nodeIntegration: false` | 🔒 Sécurité | Très faible |
+| 🟠 Haute | 10 | Tests unitaires (plus de fichiers) | 🧪 Fiabilité | Moyenne |
+| 🟠 Haute | 11 | Config ESLint/Prettier | 🔧 Qualité | Faible |
+| 🟠 Haute | 23 | Scan async non-bloquant | ⚡ Performance | Élevée |
+| 🟠 Haute | 24 | Stack overflow protection | 💥 Stabilité | Faible |
+| 🟠 Haute | 18 | Progression archivage | 📊 UX | Moyenne |
+| 🟠 Haute | 17 | Modales de confirmation custom | 🎨 UI | Moyenne |
+| 🟠 Moyenne | 4 | Supprimer `findBacFolders()` + `logger.js` | 🧹 Propreté | Faible |
+| 🟠 Moyenne | 3 | Dedup formatSize | 🔧 Maintenance | Faible |
+| 🟠 Moyenne | 15 | Rapport erreurs batch | 📊 UX | Moyenne |
+| 🟠 Moyenne | 16 | Annulation batch | 📊 UX | Moyenne |
+| 🟡 Basse | 9 | Supprimer `generate-icon.js` | 🧹 Propreté | Très faible |
+| 🟡 Basse | 13 | Multi-plateforme | 🖥️ Portabilité | Élevée |
+| 🟡 Basse | 19 | Reset recherche par onglet | 📊 UX | Faible |
+| 🟡 Basse | 20 | Hauteur scroller dynamique | 📊 Responsive | Moyenne |
+| 🟡 Basse | 22 | Prop inutilisée ItemList | 🧹 Propreté | Très faible |
+| 🟡 Basse | 25 | Cache résultats scan | ⚡ Performance | Moyenne |
+| 🟢 Mineure | 28 | Version dynamique About | 🧹 Propreté | Faible |
+| 🟢 Mineure | 12 | CI/CD | 🔧 DevOps | Moyenne |
+| 🟢 Mineure | 27 | Ctrl+Z annulation | 📊 UX | Élevée |
 
 ---
 
-*Rapport généré le 6 juin 2026 — basé sur l'analyse de l'intégralité du code source du projet.*
+## ✅ Améliorations déjà implémentées (depuis le dernier rapport)
+
+Les améliorations suivantes du rapport précédent ont été **correctement implémentées** :
+
+| # | Amélioration | Statut |
+|---|-------------|--------|
+| 2 | Composants extraits (TabBar, ItemList, ActionPanel, etc.) | ✅ Fait |
+| 4 | Transitions route (keep-alive) | ✅ Fait |
+| 5 | Thème sombre/clair avec toggle | ✅ Fait |
+| 6 | Skeleton loader | ✅ Fait |
+| 7 | Badges colorés dans les onglets | ✅ Fait |
+| 11 | Recherche/filtrage dans les listes | ✅ Fait |
+| 12 | Sélection par plage (Shift+clic) | ✅ Fait |
+| 13 | Raccourcis clavier (Ctrl+A, Échap, Suppr, F5) | ✅ Fait |
+| 16 | Sauvegarde automatique config (debounce) | ✅ Fait |
+| 17 | Prévisualisation avant action | ✅ Fait |
+| 18 | Statistiques de session | ✅ Fait |
+| 19 | Filtrage par date (7j, 30j, 90j, 1an) | ✅ Fait |
+| 20 | Bouton "Ouvrir dans l'Explorateur" | ✅ Fait |
+| 23 | Validation en temps réel des chemins | ✅ Fait |
+| 25 | Double confirmation suppression (taper "SUPPRIMER") | ✅ Fait |
+| 27 | Virtualisation des listes (vue-virtual-scroller) | ✅ Fait |
+| 29 | Debounce sur la recherche (300ms) | ✅ Fait |
+| 31 | Menu contextuel (clic droit) | ✅ Fait |
+| 34 | Persistance de l'onglet actif | ✅ Fait |
+
+---
+
+## 🔄 Corrections récentes (7 juin 2026)
+
+Les améliorations suivantes du rapport ont été **récemment corrigées manuellement** :
+
+| # | Amélioration | Statut |
+|---|-------------|--------|
+| 2 | Fix `console.log` crash (null check + originalLog) | ✅ Corrigé |
+| 4 (partiel) | Suppression de `getStandardFolders()` (code mort) | ✅ Corrigé |
+| 5 | Import redondant de `shell` supprimé des IPC handlers | ✅ Corrigé |
+| 6 | `execSync` importé en haut de `main.js` | ✅ Corrigé |
+| 7 | Import `path` inutilisé supprimé de `vite.config.js` | ✅ Corrigé |
+| 8 | `jsdom` supprimé des devDependencies | ✅ Corrigé |
+| 10 (partiel) | Tests unitaires créés (`tests/format.test.js`) | ✅ Corrigé |
+| 11 (partiel) | ESLint + Prettier ajoutés aux devDependencies | ✅ Corrigé |
+| 21 | Styles du ContextMenu passés en `scoped` | ✅ Corrigé |
+
+### Corrections restantes à faire
+
+| # | Amélioration | Raison |
+|---|-------------|--------|
+| 1 | `nodeIntegration: true` → `false` | 🔴 Sécurité — toujours en `true` |
+| 4 (suite) | Supprimer `findBacFolders()` + `logger.js` | Code mort toujours présent |
+| 9 | Supprimer `generate-icon.js` (garder `.mjs`) | Les deux scripts existent encore |
+
+---
+
+## 📁 Fichiers ajoutés dans cette session
+
+| Fichier | Description |
+|---------|-------------|
+| `eslint.config.js` | Configuration ESLint flat config pour Vue.js 3 |
+| `.prettierrc` | Configuration Prettier (singleQuote, no semi) |
+| `.prettierignore` | Fichiers exclus du formatting |
+| `vitest.config.ts` | Configuration vitest dédiée (globals, happy-dom) |
+| `tests/setup.js` | Mock de `window.electronAPI` pour les tests |
+| `tests/format.test.js` | Tests de `formatSize` (7 cas) |
+| `tests/components/TabBar.test.js` | Tests du composant TabBar (7 cas) |
+| `tests/components/RecycleBinBar.test.js` | Tests du composant RecycleBinBar (8 cas) |
+| `tests/components/ActionPanel.test.js` | Tests du composant ActionPanel (16 cas) |
+
+---
+
+*Rapport mis à jour le 7 juin 2026 — basé sur l'analyse de l'intégralité du code source du projet.*

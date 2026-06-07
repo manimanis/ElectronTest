@@ -7,12 +7,17 @@ const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const sevenZip = require('7zip-bin')
+const { execSync } = require('child_process')
 
 let mainWindow = null
 let currentScanAbort = false
 
+const originalLog = console.log
 console.log = (...args) => {
-  mainWindow.webContents.send('main-log', args.join(' '));
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('main-log', args.join(' '));
+  }
+  originalLog(...args)
 };
 
 /**
@@ -576,7 +581,6 @@ ipcMain.handle('file:getInfo', async (event, filePath) => {
  */
 ipcMain.handle('file:openInSystem', async (event, filePath) => {
   try {
-    const { shell } = require('electron')
     await shell.openPath(filePath)
     return true
   } catch (err) {
@@ -590,7 +594,6 @@ ipcMain.handle('file:openInSystem', async (event, filePath) => {
  */
 ipcMain.handle('folder:openInExplorer', async (event, folderPath) => {
   try {
-    const { shell } = require('electron')
     await shell.openPath(folderPath)
     return true
   } catch (err) {
@@ -605,7 +608,6 @@ ipcMain.handle('folder:openInExplorer', async (event, folderPath) => {
 function getDriveRoots() {
   const drives = []
   try {
-    const { execSync } = require('child_process')
     const output = execSync('wmic logicaldisk get name', {
       timeout: 5000,
       windowsHide: true,
@@ -632,49 +634,6 @@ function getDriveRoots() {
   return drives
 }
 
-/**
- * Find folders at the root of drives whose name matches "Bac" followed by digits (e.g. Bac2026, Bac2025)
- */
-function findBacFolders() {
-  const bacFolders = []
-  const bacPattern = /^Bac\d+$/i
-  const drives = getDriveRoots()
-
-  for (const driveRoot of drives) {
-    try {
-      const entries = fs.readdirSync(driveRoot)
-      for (const entry of entries) {
-        const fullPath = path.join(driveRoot, entry)
-        try {
-          if (fs.statSync(fullPath).isDirectory() && bacPattern.test(entry)) {
-            bacFolders.push({ name: entry, path: fullPath })
-          }
-        } catch (_) { /* skip inaccessible */ }
-      }
-    } catch (_) { /* skip inaccessible drives */ }
-  }
-
-  return bacFolders
-}
-
-/**
- * Get the list of standard user folders to clean
- * Includes: Desktop, Documents, Downloads, and any Bac### folders found on drive roots
- */
-function getStandardFolders() {
-  const homeDir = os.homedir()
-  const desktop = path.join(homeDir, 'Desktop')
-  const documents = path.join(homeDir, 'Documents')
-  const downloads = path.join(homeDir, 'Downloads')
-
-  const folders = [
-    { name: 'Desktop', path: desktop },
-    { name: 'Documents', path: documents },
-    { name: 'Downloads', path: downloads }
-  ]
-
-  return folders
-}
 
 /**
  * Check if a file is a shortcut (.lnk on Windows)
@@ -1009,8 +968,6 @@ function getSevenZipPath() {
  * Returns: { success, archivePath, error, canceled }
  */
 ipcMain.handle('cleaner:archiveTo7z', async (event, items, destDir) => {
-  const { execSync } = require('child_process')
-
   let archivePath
 
   if (destDir) {
@@ -1077,8 +1034,6 @@ ipcMain.handle('cleaner:findDuplicateShortcuts', async () => {
  * Uses Shell.Application COM object to count items
  */
 async function isRecycleBinEmpty() {
-  const { execSync } = require('child_process')
-
   function powerShellCount() {
     let count = 0, success = false
     try {
@@ -1132,8 +1087,6 @@ WScript.Echo objFolder.Items().Count
  * Uses Shell.Application COM object via PowerShell which is the most reliable method
  */
 async function emptyRecycleBin() {
-  const { execSync } = require('child_process')
-
   function powerShellEmpty() {
     let success = false,
       error = ''
@@ -1275,60 +1228,6 @@ ipcMain.handle('config:getDefaults', async () => {
     console.error('config:getDefaults error:', err.message)
     return serializeForIpc({ folders: [] })
   }
-})
-
-/**
- * Validate a folder path or regex pattern
- * Returns { valid, resolved, error }
- * resolved is always an array of paths (or empty array)
- */
-/**
- * Find duplicate files across configured folders.
- * Groups files by name (case-insensitive). Files with the same name in different locations are duplicates.
- */
-function findDuplicateFiles() {
-  const folders = getConfiguredFolders()
-  const filesByName = {} // name.toLowerCase() → [{ name, path, size, formattedSize, folder, modifiedAt }]
-
-  for (const folder of folders) {
-    if (!fs.existsSync(folder.path)) continue
-    try {
-      const entries = fs.readdirSync(folder.path)
-      for (const entry of entries) {
-        const fullPath = path.join(folder.path, entry)
-        try {
-          const stats = fs.statSync(fullPath)
-          if (stats.isDirectory()) continue
-          if (isShortcutOrSymlink(fullPath)) continue
-
-          const key = entry.toLowerCase()
-          if (!filesByName[key]) filesByName[key] = []
-          filesByName[key].push({
-            name: entry,
-            path: fullPath,
-            size: stats.size,
-            formattedSize: formatSize(stats.size),
-            folder: folder.name,
-            modifiedAt: stats.mtime.toISOString()
-          })
-        } catch (_) { /* skip inaccessible */ }
-      }
-    } catch (_) { /* skip inaccessible folder */ }
-  }
-
-  // Filter: only keep groups with more than 1 file (duplicates)
-  const duplicates = []
-  for (const [, files] of Object.entries(filesByName)) {
-    if (files.length > 1) {
-      duplicates.push({ name: files[0].name, files })
-    }
-  }
-  duplicates.sort((a, b) => a.name.localeCompare(b.name))
-  return duplicates
-}
-
-ipcMain.handle('cleaner:findDuplicateFiles', async () => {
-  return findDuplicateFiles()
 })
 
 ipcMain.handle('config:validatePath', async (event, entry) => {
